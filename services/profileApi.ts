@@ -1,6 +1,6 @@
 import api from './api';
 
-const PROFILE_BASE_URL = 'http://192.168.210.122:5000/api';
+const PROFILE_BASE_URL = 'http://web-production-5b1fc.up.railway.app/api';
 
 // For Android Emulator use: 'http://10.0.2.2:5000/api'
 // For physical device, use your computer's IP address
