@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, Image, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, Image, ScrollView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { postsAPI } from '../../services/postsApi';
+import { showToast } from '../../utils/toast';
 
 const CATEGORIES = ['All','Level','Department','Exam','Timetable','Event'];
 
@@ -15,24 +16,31 @@ export default function UploadScreen() {
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access'); return; }
+    if (!perm.granted) { 
+      showToast.warning('Please allow photo access to upload images', 'Permission Required'); 
+      return; 
+    }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, base64: true, quality: 0.7 });
     if (!res.canceled && res.assets[0].base64) {
       setImage(`data:image/jpeg;base64,${res.assets[0].base64}`);
+      showToast.success('Image selected successfully!', 'Success');
     }
   };
 
   const submit = async () => {
-    if (!text && !image) { Alert.alert('Nothing to post', 'Add text or image'); return; }
+    if (!text && !image) { 
+      showToast.warning('Add some text or an image to your post', 'Nothing to Post'); 
+      return; 
+    }
     try {
       setSubmitting(true);
       await postsAPI.create({ text, imageBase64: image, category });
       setSubmitting(false);
       setText(''); setImage(undefined);
-      Alert.alert('Posted', 'Your post has been published');
+      showToast.success('Your post has been published! 🎉', 'Posted');
     } catch (e:any) {
       setSubmitting(false);
-      Alert.alert('Error', e?.response?.data?.message || 'Failed to publish');
+      showToast.error(e?.response?.data?.message || 'Failed to publish post', 'Error');
     }
   };
 
@@ -101,6 +109,7 @@ const styles = StyleSheet.create({
   removeBtn: { position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 100, borderWidth: 1, backgroundColor: 'transparent' },
   chipActive: { backgroundColor: 'rgba(25,118,210,0.12)' },
+  chipText: { fontSize: 13, fontWeight: '600' },
   submitBtn: { marginTop: 12, backgroundColor: '#1976D2', height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   submitText: { color: '#FFFFFF', fontWeight: '800' },
 });

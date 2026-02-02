@@ -89,7 +89,7 @@ export default function ChannelsScreen() {
   };
 
   if (reorderMode && orderedCards.length) {
-    const data = orderedCards.map(c => ({ key: c.key, ...c }));
+    const data = orderedCards.map(c => ({ ...c }));
     const renderItem = ({ item, drag, isActive }: RenderItemParams<(typeof data)[number]>) => (
       <TouchableOpacity
         onLongPress={drag}
@@ -201,5 +201,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  reorderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
 });

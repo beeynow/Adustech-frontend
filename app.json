@@ -1,23 +1,36 @@
 {
   "expo": {
-    "name": "adustech",
-    "slug": "adustech",
+    "name": "Adustech Tech",
+    "slug": "adustech-tech",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "adustech",
     "userInterfaceStyle": "automatic",
+    "primaryColor": "#1976D2",
     "newArchEnabled": true,
+    "owner": "adustech",
+    "description": "Official mobile app for Adustech - Connect, learn, and stay updated with your university community.",
+    "githubUrl": "https://github.com/adustech/adustech-app",
     "splash": {
       "image": "./assets/images/plash.png",
       "resizeMode": "contain",
       "backgroundColor": "#E6F4FE"
     },
     "ios": {
+      "bundleIdentifier": "com.adustech.app",
+      "buildNumber": "1.0.0",
+      "associatedDomains": [
+        "applinks:beeynow.online",
+        "applinks:www.beeynow.online"
+      ],
       "infoPlist": {
-        "NSCalendarsUsageDescription": "We use your calendar to add events you choose."
+        "NSCalendarsUsageDescription": "We use your calendar to add events you choose.",
+        "NSPhotoLibraryUsageDescription": "We need access to your photo library to let you upload images.",
+        "NSCameraUsageDescription": "We need access to your camera to let you take photos."
       },
       "supportsTablet": true,
+      "icon": "./assets/images/icon.png",
       "splash": {
         "image": "./assets/images/plash.png",
         "resizeMode": "contain",
@@ -29,12 +42,56 @@
       }
     },
     "android": {
+      "package": "com.adustech.app",
+      "versionCode": 1,
+      "icon": "./assets/images/icon.png",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "beeynow.online",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.beeynow.online",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "adustech"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR"
+      ],
       "splash": {
         "image": "./assets/images/plash.png",
         "resizeMode": "contain",
@@ -70,11 +127,17 @@
             "backgroundColor": "#0A1929"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_PROJECT_ID_HERE"
+      }
     }
   }
 }

@@ -1,0 +1,16 @@
+# EAS Build Ignore
+.git
+.gitignore
+node_modules
+*.log
+.expo
+.expo-shared
+*.orig.*
+web-build/
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode
+.idea
+*.iml

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   useColorScheme,
-  Alert,
   ActivityIndicator,
   Image,
 } from 'react-native';
@@ -17,6 +16,7 @@ import { profileAPI, UserProfile } from '../../services/profileApi';
 import { useAuth } from '../../context/AuthContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { showToast } from '../../utils/toast';
 
 export default function ProfileScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -104,7 +104,7 @@ export default function ProfileScreen() {
     if (!editing) return;
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photos');
+      showToast.warning('Please allow access to your photos', 'Permission Required');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -139,12 +139,12 @@ export default function ProfileScreen() {
     setSaving(false);
 
     if (result.success) {
-      if (!silent) Alert.alert('Saved', 'Your profile has been updated');
+      if (!silent) showToast.success('Your profile has been updated! ✨', 'Saved');
       if (!silent) setEditing(false);
       loadProfile();
       return { success: true };
     } else {
-      if (!silent) Alert.alert('Error', result.message || 'Failed to update profile');
+      if (!silent) showToast.error(result.message || 'Failed to update profile', 'Error');
       return { success: false };
     }
   };
@@ -448,11 +448,10 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.btnDanger]}
-              onPress={() => {
-                Alert.alert('Logout', 'Are you sure you want to logout?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/login'); } }
-                ]);
+              onPress={async () => {
+                await logout();
+                showToast.success('Logged out successfully. See you soon! 👋', 'Goodbye');
+                router.replace('/login');
               }}
             >
               <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />

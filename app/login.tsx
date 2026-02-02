@@ -6,7 +6,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   useColorScheme,
   Pressable,
@@ -16,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { showToast } from '../utils/toast';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -29,7 +29,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showToast.error('Please fill in all fields', 'Error');
       return;
     }
 
@@ -38,10 +38,10 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (result.success) {
-      Alert.alert('Success', 'Login successful!');
+      showToast.success('Login successful! Welcome back 🎉', 'Success');
       router.replace('/dashboard');
     } else {
-      Alert.alert('Login Failed', result.message || 'Please try again');
+      showToast.error(result.message || 'Please try again', 'Login Failed');
     }
   };
 

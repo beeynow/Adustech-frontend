@@ -6,7 +6,6 @@ import { eventsAPI } from '../../services/eventsApi';
 import * as Calendar from 'expo-calendar';
 import * as Linking from 'expo-linking';
 import { Image } from 'expo-image';
-import { useState } from 'react';
 
 export default function EventDetail() {
   const isDark = useColorScheme() === 'dark';

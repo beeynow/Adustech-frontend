@@ -6,7 +6,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   useColorScheme,
   ScrollView,
@@ -16,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { showToast } from '../utils/toast';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
@@ -32,17 +32,17 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showToast.error('Please fill in all fields', 'Error');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showToast.error('Passwords do not match', 'Error');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showToast.error('Password must be at least 6 characters', 'Error');
       return;
     }
 
@@ -51,10 +51,10 @@ export default function RegisterScreen() {
     setLoading(false);
 
     if (result.success) {
-      Alert.alert('Success', 'Registration successful! Please verify your email with OTP.');
+      showToast.success('Registration successful! Check your email for OTP 📧', 'Success');
       router.push({ pathname: '/verify-otp', params: { email } });
     } else {
-      Alert.alert('Registration Failed', result.message || 'Please try again');
+      showToast.error(result.message || 'Please try again', 'Registration Failed');
     }
   };
 

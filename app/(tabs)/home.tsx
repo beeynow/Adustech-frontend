@@ -68,12 +68,13 @@ export default function HomeScreen() {
     try { await postsAPI.toggleLike(id); } catch {}
   };
   const toggleRepost = async (id: string) => {
-  setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: (p as any).reposted ? p.reposts - 1 : p.reposts + 1, reposted: !(p as any).reposted } as any : p));
-  try {
-    const res = await postsAPI.toggleRepost(id);
-    setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: res.reposts, reposted: res.reposted } as any : p));
-  } catch {}
-};
+    setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: (p as any).reposted ? p.reposts - 1 : p.reposts + 1, reposted: !(p as any).reposted } as any : p));
+    try {
+      await postsAPI.toggleRepost(id);
+    } catch (e) {
+      console.log('Repost error:', e);
+    }
+  };
   const incComment = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: p.comments + 1 } : p));
 
   const headerBg = isDark ? '#0A1929' : '#FFFFFF';
@@ -88,7 +89,8 @@ export default function HomeScreen() {
   };
 
   const renderItem = ({ item }: { item: Post }) => (
-    <TouchableOpacity onPress={() => goToDetail(item)} activeOpacity={0.8} style={[styles.post, { backgroundColor: card, borderColor: border }]}>      <View style={styles.postHeader}>
+    <TouchableOpacity onPress={() => goToDetail(item)} activeOpacity={0.8} style={[styles.post, { backgroundColor: card, borderColor: border }]}>
+      <View style={styles.postHeader}>
         <View style={[styles.avatar, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
           <Text style={{ color: '#fff', fontWeight: '800' }}>{item.author.charAt(0)}</Text>
         </View>
@@ -116,7 +118,7 @@ export default function HomeScreen() {
           <Text style={[styles.count, { color: muted }]}>{item.comments}</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const [commentsVisible, setCommentsVisible] = useState(false);
@@ -229,7 +231,7 @@ export default function HomeScreen() {
 
       {/* Comment Bottom Sheet */}
       {commentsVisible && (
-        <View style={[styles.sheetWrap, { backgroundColor: card }]>
+        <View style={[styles.sheetWrap, { backgroundColor: card }]}>
           <View style={[styles.sheetHeader, { backgroundColor: card, borderBottomColor: isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)' }]}>
             <Text style={[styles.sheetTitle, { color: textPrimary }]}>Comments</Text>
             <TouchableOpacity onPress={() => setCommentsVisible(false)}>
@@ -292,6 +294,7 @@ const styles = StyleSheet.create({
   chipsRow: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 8, flexWrap: 'wrap' },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 100, borderWidth: 1, backgroundColor: 'transparent' },
   chipActive: { backgroundColor: 'rgba(25,118,210,0.12)' },
+  chipText: { fontSize: 13, fontWeight: '600' },
 
   post: { borderRadius: 16, padding: 12, borderWidth: 1, marginBottom: 12 },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
