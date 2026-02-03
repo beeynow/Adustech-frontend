@@ -52,7 +52,8 @@ export default function RegisterScreen() {
 
     if (result.success) {
       showToast.success('Registration successful! Check your email for OTP 📧', 'Success');
-      router.push({ pathname: '/verify-otp', params: { email } });
+      // Use replace instead of push to avoid back navigation issues
+      router.replace({ pathname: '/verify-otp' as any, params: { email } });
     } else {
       showToast.error(result.message || 'Please try again', 'Registration Failed');
     }

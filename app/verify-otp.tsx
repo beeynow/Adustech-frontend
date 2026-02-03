@@ -6,15 +6,16 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   useColorScheme,
   Pressable,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { showToast } from '../utils/toast';
 
 export default function VerifyOTPScreen() {
   const params = useLocalSearchParams();
@@ -34,10 +35,10 @@ export default function VerifyOTPScreen() {
     const result = await verifyOTP(email, code);
     setLoading(false);
     if (result.success) {
-      Alert.alert('Success', 'Email verified successfully! You can now log in.');
-      router.replace('/login');
+      showToast.success('Email verified successfully! You can now log in. ✅', 'Success');
+      router.replace('/login' as any);
     } else {
-      Alert.alert('Verification Failed', result.message || 'Invalid or expired OTP');
+      showToast.error(result.message || 'Invalid or expired OTP', 'Verification Failed');
     }
   }, [email, loading, resending, verifyOTP, router]);
 
@@ -52,10 +53,10 @@ export default function VerifyOTPScreen() {
     setResending(false);
 
     if (result.success) {
-      Alert.alert('Success', 'OTP has been resent to your email');
-      setOtp('');
+      showToast.success('OTP sent! Check your email. 📧', 'Success');
+      setOtp(''); // Clear the input
     } else {
-      Alert.alert('Error', result.message || 'Failed to resend OTP');
+      showToast.error(result.message || 'Failed to resend OTP', 'Error');
     }
   };
 
