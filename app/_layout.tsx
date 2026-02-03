@@ -5,7 +5,6 @@ import { View } from "react-native";
 import SplashScreenComponent from "../components/SplashScreen";
 import { AuthProvider } from "../context/AuthContext";
 import Toast from "react-native-toast-message";
-import { useDeepLinking } from "../hooks/useDeepLinking";
 
 // Immediately hide the native splash screen and show our custom one
 SplashScreen.hideAsync().catch(() => {
@@ -47,11 +46,9 @@ export default function RootLayout() {
     return <SplashScreenComponent />;
   }
 
-  function RootLayoutContent() {
-    useDeepLinking(); // Initialize deep linking
-
-    return (
-      <>
+  return (
+    <AuthProvider>
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
         <Stack screenOptions={{
           headerShown: false,
         }}>
@@ -63,14 +60,6 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
         <Toast />
-      </>
-    );
-  }
-
-  return (
-    <AuthProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <RootLayoutContent />
       </View>
     </AuthProvider>
   );

@@ -20,10 +20,6 @@
     "ios": {
       "bundleIdentifier": "com.adustech.app",
       "buildNumber": "1.0.0",
-      "associatedDomains": [
-        "applinks:beeynow.online",
-        "applinks:www.beeynow.online"
-      ],
       "infoPlist": {
         "NSCalendarsUsageDescription": "We use your calendar to add events you choose.",
         "NSPhotoLibraryUsageDescription": "We need access to your photo library to let you upload images.",
@@ -45,40 +41,6 @@
       "package": "com.adustech.app",
       "versionCode": 1,
       "icon": "./assets/images/icon.png",
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "beeynow.online",
-              "pathPrefix": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "www.beeynow.online",
-              "pathPrefix": "/"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "data": [
-            {
-              "scheme": "adustech"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        }
-      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
