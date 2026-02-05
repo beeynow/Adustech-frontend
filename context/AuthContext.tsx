@@ -83,6 +83,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('user', JSON.stringify(userData));
       return { success: true, message: result.data.message };
     }
+    // Store email for potential OTP verification
+    if (result.message?.includes('Email not verified') || result.message?.includes('verify OTP')) {
+      await AsyncStorage.setItem('pendingEmail', email);
+    }
     return { success: false, message: result.message };
   };
 

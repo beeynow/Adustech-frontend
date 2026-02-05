@@ -31,31 +31,63 @@ export default function RegisterScreen() {
   const isDark = colorScheme === 'dark';
 
   const handleRegister = async () => {
+    // Input validation
     if (!name || !email || !password || !confirmPassword) {
       showToast.error('Please fill in all fields', 'Error');
       return;
     }
 
+    // Name validation
+    if (name.trim().length < 2) {
+      showToast.error('Name must be at least 2 characters', 'Invalid Name');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showToast.error('Please enter a valid email address', 'Invalid Email');
+      return;
+    }
+
+    // Password validation
+    if (password.length < 8) {
+      showToast.error('Password must be at least 8 characters', 'Weak Password');
+      return;
+    }
+
+    // Password strength check
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    
+    if (!hasUpperCase || !hasLowerCase || !hasNumbers) {
+      showToast.error('Password must contain uppercase, lowercase, and numbers', 'Weak Password');
+      return;
+    }
+
+    // Confirm password match
     if (password !== confirmPassword) {
       showToast.error('Passwords do not match', 'Error');
       return;
     }
 
-    if (password.length < 6) {
-      showToast.error('Password must be at least 6 characters', 'Error');
-      return;
-    }
-
     setLoading(true);
-    const result = await register(name, email, password);
-    setLoading(false);
+    
+    try {
+      const result = await register(name.trim(), email.toLowerCase().trim(), password);
+      setLoading(false);
 
-    if (result.success) {
-      showToast.success('Registration successful! Check your email for OTP 📧', 'Success');
-      // Use replace instead of push to avoid back navigation issues
-      router.replace({ pathname: '/verify-otp' as any, params: { email } });
-    } else {
-      showToast.error(result.message || 'Please try again', 'Registration Failed');
+      if (result.success) {
+        showToast.success('Registration successful! Check your email for OTP 📧', 'Success');
+        // Use replace instead of push to avoid back navigation issues
+        router.replace({ pathname: '/verify-otp' as any, params: { email: email.toLowerCase().trim() } });
+      } else {
+        showToast.error(result.message || 'Please try again', 'Registration Failed');
+      }
+    } catch (error) {
+      setLoading(false);
+      showToast.error('Network error. Please check your connection.', 'Error');
     }
   };
 

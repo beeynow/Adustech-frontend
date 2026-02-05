@@ -28,20 +28,46 @@ export default function LoginScreen() {
   const isDark = colorScheme === 'dark';
 
   const handleLogin = async () => {
+    // Input validation
     if (!email || !password) {
       showToast.error('Please fill in all fields', 'Error');
       return;
     }
 
-    setLoading(true);
-    const result = await login(email, password);
-    setLoading(false);
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showToast.error('Please enter a valid email address', 'Invalid Email');
+      return;
+    }
 
-    if (result.success) {
-      showToast.success('Login successful! Welcome back 🎉', 'Success');
-      router.replace('/dashboard');
-    } else {
-      showToast.error(result.message || 'Please try again', 'Login Failed');
+    setLoading(true);
+    
+    try {
+      const result = await login(email.toLowerCase().trim(), password);
+      setLoading(false);
+
+      if (result.success) {
+        showToast.success('Login successful! Welcome back 🎉', 'Success');
+        // Small delay for smooth transition
+        setTimeout(() => {
+          router.replace('/dashboard');
+        }, 300);
+      } else {
+        // Check if the error is about unverified email
+        if (result.message?.includes('Email not verified') || result.message?.includes('verify OTP')) {
+          showToast.error('Please verify your email first', 'Email Not Verified');
+          // Redirect to OTP verification page
+          setTimeout(() => {
+            router.push({ pathname: '/verify-otp' as any, params: { email: email.toLowerCase().trim() } });
+          }, 500);
+        } else {
+          showToast.error(result.message || 'Please try again', 'Login Failed');
+        }
+      }
+    } catch (error) {
+      setLoading(false);
+      showToast.error('Network error. Please check your connection.', 'Error');
     }
   };
 

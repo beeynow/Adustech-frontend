@@ -10,6 +10,7 @@ import {
   useColorScheme,
   Pressable,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
@@ -17,46 +18,164 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { showToast } from '../utils/toast';
 
+const OTP_EXPIRY_TIME = 600; // 10 minutes in seconds
+const RESEND_COOLDOWN = 60; // 60 seconds cooldown
+
 export default function VerifyOTPScreen() {
   const params = useLocalSearchParams();
   const email = params.email as string;
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(OTP_EXPIRY_TIME);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [attempts, setAttempts] = useState(0);
   const { verifyOTP, resendOTP } = useAuth();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const shakeAnimation = useRef(new Animated.Value(0)).current;
+
+  // Redirect if no email provided
+  useEffect(() => {
+    if (!email) {
+      showToast.error('No email provided. Please try again.', 'Error');
+      router.replace('/login');
+    }
+  }, [email, router]);
+
+  // OTP Expiry countdown timer
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          showToast.error('OTP expired. Please request a new one.', 'Expired');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  // Format time display
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Shake animation for errors
+  const triggerShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnimation, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
 
   const handleVerifyOTPWith = useCallback(async (code: string) => {
-    if (!code || code.length !== 6) return;
-    if (loading || resending) return;
-    setLoading(true);
-    const result = await verifyOTP(email, code);
-    setLoading(false);
-    if (result.success) {
-      showToast.success('Email verified successfully! You can now log in. ✅', 'Success');
-      router.replace('/login' as any);
-    } else {
-      showToast.error(result.message || 'Invalid or expired OTP', 'Verification Failed');
+    if (!code || code.length !== 6) {
+      triggerShake();
+      showToast.error('Please enter a complete 6-digit code', 'Invalid Input');
+      return;
     }
-  }, [email, loading, resending, verifyOTP, router]);
+    
+    if (loading || resending) return;
+    
+    // Check if OTP expired
+    if (timeLeft <= 0) {
+      triggerShake();
+      showToast.error('OTP has expired. Please request a new one.', 'Expired');
+      return;
+    }
+
+    // Rate limiting - max 5 attempts
+    if (attempts >= 5) {
+      triggerShake();
+      showToast.error('Too many attempts. Please request a new OTP.', 'Rate Limited');
+      return;
+    }
+
+    setLoading(true);
+    setAttempts((prev) => prev + 1);
+    
+    try {
+      const result = await verifyOTP(email, code);
+      setLoading(false);
+      
+      if (result.success) {
+        showToast.success('Email verified successfully! You can now log in. ✅', 'Success');
+        // Small delay for user to see success message
+        setTimeout(() => {
+          router.replace('/login' as any);
+        }, 500);
+      } else {
+        triggerShake();
+        setOtp(''); // Clear OTP on failure
+        showToast.error(result.message || 'Invalid or expired OTP', 'Verification Failed');
+      }
+    } catch (error) {
+      setLoading(false);
+      triggerShake();
+      setOtp('');
+      showToast.error('Network error. Please check your connection.', 'Error');
+    }
+  }, [email, loading, resending, verifyOTP, router, timeLeft, attempts]);
 
   const handleVerifyOTP = async () => {
     await handleVerifyOTPWith(otp);
   };
 
   const handleResendOTP = async () => {
-    if (loading || resending) return;
-    setResending(true);
-    const result = await resendOTP(email);
-    setResending(false);
+    if (resendCooldown > 0) {
+      showToast.error(`Please wait ${resendCooldown} seconds before resending`, 'Too Soon');
+      return;
+    }
 
-    if (result.success) {
-      showToast.success('OTP sent! Check your email. 📧', 'Success');
-      setOtp(''); // Clear the input
-    } else {
-      showToast.error(result.message || 'Failed to resend OTP', 'Error');
+    if (loading || resending) return;
+    
+    setResending(true);
+    
+    try {
+      const result = await resendOTP(email);
+      setResending(false);
+      
+      if (result.success) {
+        // Reset timers and attempts
+        setTimeLeft(OTP_EXPIRY_TIME);
+        setResendCooldown(RESEND_COOLDOWN);
+        setAttempts(0);
+        setOtp(''); // Clear current OTP input
+        showToast.success('New OTP sent! Check your email. 📧', 'Success');
+      } else {
+        showToast.error(result.message || 'Failed to resend OTP', 'Error');
+      }
+    } catch (error) {
+      setResending(false);
+      showToast.error('Network error. Please check your connection.', 'Error');
     }
   };
 
@@ -83,14 +202,40 @@ export default function VerifyOTPScreen() {
           {email}
         </Text>
 
-        {/* OTP Input */}
-        <View style={styles.inputContainer}>
+        {/* Timer and Attempts Info */}
+        <View style={styles.infoContainer}>
+          <View style={styles.infoItem}>
+            <Ionicons 
+              name={timeLeft > 60 ? "time-outline" : "alert-circle-outline"} 
+              size={16} 
+              color={timeLeft > 60 ? (isDark ? '#90CAF9' : '#546E7A') : '#FF6B6B'} 
+            />
+            <Text style={[
+              styles.infoText, 
+              { color: timeLeft > 60 ? (isDark ? '#90CAF9' : '#546E7A') : '#FF6B6B' }
+            ]}>
+              {timeLeft > 0 ? `Expires in ${formatTime(timeLeft)}` : 'Expired'}
+            </Text>
+          </View>
+          {attempts > 0 && (
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
+                Attempts: {attempts}/5
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* OTP Input with Animation */}
+        <Animated.View style={[styles.inputContainer, { transform: [{ translateX: shakeAnimation }] }]}>
           <TextInput
             style={[
               styles.otpInput,
               {
                 backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF',
                 color: isDark ? '#FFFFFF' : '#0A1929',
+                borderColor: timeLeft <= 60 ? '#FF6B6B' : (isDark ? '#42A5F5' : '#1976D2'),
+                borderWidth: 2,
               },
             ]}
             placeholder="000000"
@@ -106,9 +251,10 @@ export default function VerifyOTPScreen() {
             }}
             keyboardType="number-pad"
             maxLength={6}
-            editable={!loading && !resending}
+            editable={!loading && !resending && timeLeft > 0}
+            autoFocus
           />
-        </View>
+        </Animated.View>
 
         {/* Verify Button */}
         <TouchableOpacity
@@ -132,12 +278,19 @@ export default function VerifyOTPScreen() {
           <Text style={[styles.footerText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
             Didn&apos;t receive the code?{' '}
           </Text>
-          <TouchableOpacity onPress={handleResendOTP} disabled={loading || resending}>
+          <TouchableOpacity 
+            onPress={handleResendOTP} 
+            disabled={loading || resending || resendCooldown > 0}
+            style={resendCooldown > 0 && styles.disabledLink}
+          >
             {resending ? (
               <ActivityIndicator size="small" color={isDark ? '#42A5F5' : '#1976D2'} />
             ) : (
-              <Text style={[styles.linkText, { color: isDark ? '#42A5F5' : '#1976D2' }]}>
-                Resend
+              <Text style={[
+                styles.linkText, 
+                { color: resendCooldown > 0 ? '#999' : (isDark ? '#42A5F5' : '#1976D2') }
+              ]}>
+                {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : 'Resend'}
               </Text>
             )}
           </TouchableOpacity>
@@ -263,5 +416,24 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 16,
+  },
+  infoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 16,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  disabledLink: {
+    opacity: 0.5,
   },
 });
