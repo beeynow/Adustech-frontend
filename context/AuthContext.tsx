@@ -39,6 +39,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (userData) {
         const parsed = JSON.parse(userData);
         setUser(parsed);
+        console.log('Auth status loaded:', parsed);
+      } else {
+        console.log('No user data found in storage');
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
@@ -75,12 +78,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     const result = await authAPI.login(email, password);
     if (result.success) {
-      // Extract user name from response or email
+      // Extract user data from response
       const name = result.data.user?.name || email.split('@')[0];
       const role = result.data.user?.role as User['role'] | undefined;
-      const userData: User = { name, email, role };
+      const userData: User = { 
+        name, 
+        email: result.data.user?.email || email, 
+        role 
+      };
+      
+      // Save user data to state and AsyncStorage
       setUser(userData);
       await AsyncStorage.setItem('user', JSON.stringify(userData));
+      
+      // Log for debugging
+      console.log('User logged in and saved:', userData);
+      
       return { success: true, message: result.data.message };
     }
     // Store email for potential OTP verification

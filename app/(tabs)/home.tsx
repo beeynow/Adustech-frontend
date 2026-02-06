@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image, ScrollView, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image, ScrollView, Platform, StatusBar, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { postsAPI } from '../../services/postsApi';
+import { useAuth } from '../../context/AuthContext';
+import { canPostToHome, getPermissionErrorMessage, getRoleBadgeColor, getRoleDisplayName } from '../../utils/permissions';
+import NotificationModal from '../../components/NotificationModal';
+import type { UserRole } from '../../utils/permissions';
 
 interface Post {
   id: string;
@@ -24,11 +28,20 @@ import { useRouter } from 'expo-router';
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const router = useRouter();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [posts, setPosts] = useState<Post[]>([] as any);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  
+  // Mock notifications - Replace with actual API
+  const [notifications] = useState([
+    { id: '1', title: 'New Comment', message: 'Someone commented on your post', timestamp: new Date(Date.now() - 300000), read: false, type: 'info' as const },
+    { id: '2', title: 'Post Liked', message: 'Your post received 10 likes', timestamp: new Date(Date.now() - 3600000), read: false, type: 'success' as const },
+    { id: '3', title: 'New Event', message: 'Check out the upcoming campus event', timestamp: new Date(Date.now() - 86400000), read: true, type: 'info' as const },
+  ]);
 
   useEffect(() => {
     (async () => {
@@ -147,16 +160,74 @@ export default function HomeScreen() {
     } catch (e) {}
   };
 
+  // Handle create post with permission check
+  const handleCreatePost = () => {
+    const userRole = user?.role as UserRole | undefined;
+    
+    if (!canPostToHome(userRole)) {
+      Alert.alert(
+        'Permission Denied',
+        getPermissionErrorMessage('post-home', userRole),
+        [
+          { text: 'OK', style: 'default' },
+          { 
+            text: 'Learn More', 
+            style: 'cancel',
+            onPress: () => {
+              Alert.alert(
+                'Posting Permissions',
+                `Your role: ${getRoleDisplayName(userRole)}\n\nOnly Power Admins and Admins can post to the home feed. Department Admins can post to their department channels.\n\nContact an administrator if you need posting privileges.`,
+                [{ text: 'Got it' }]
+              );
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Navigate to upload/create post screen
+    router.push('/upload' as any);
+  };
+
+  const unreadNotifications = notifications.filter(n => !n.read).length;
+
   return (
     <View style={[styles.container, { backgroundColor: bg }]}> 
       {/* Header (non-scroll) */}
       <View style={{ height: (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 12) }} />
       <View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: border }]}> 
         <Text style={[styles.logo, { color: textPrimary }]}>ADUSTECH</Text>
-        <TouchableOpacity accessibilityRole="button">
-          <Ionicons name="notifications-outline" size={22} color={isDark ? '#64B5F6' : '#1976D2'} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {user?.role && (user.role === 'power' || user.role === 'admin' || user.role === 'd-admin') && (
+            <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user.role as UserRole) }]}>
+              <Text style={styles.roleBadgeText}>{user.role === 'power' ? 'PA' : user.role === 'admin' ? 'A' : 'DA'}</Text>
+            </View>
+          )}
+          <TouchableOpacity 
+            accessibilityRole="button"
+            style={styles.notificationButton}
+            onPress={() => setNotificationsVisible(true)}
+          >
+            <Ionicons name="notifications-outline" size={22} color={isDark ? '#64B5F6' : '#1976D2'} />
+            {unreadNotifications > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>{unreadNotifications > 9 ? '9+' : unreadNotifications}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Notification Modal */}
+      <NotificationModal
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+        notifications={notifications}
+        onMarkAsRead={(id) => console.log('Mark as read:', id)}
+        onMarkAllAsRead={() => console.log('Mark all as read')}
+        onClearAll={() => console.log('Clear all')}
+      />
 
       {/* Search + categories (sticky header for list) */}
       <FlatList
@@ -281,6 +352,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   logo: { fontWeight: '800', fontSize: 18, letterSpacing: 0.5 },
+  headerRight: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12 
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  notificationButton: {
+    position: 'relative',
+    padding: 4,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   searchWrap: {
     height: 44,
     borderRadius: 12,
