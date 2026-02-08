@@ -181,18 +181,27 @@ export default function UploadScreen() {
   };
 
   const validatePost = (): boolean => {
-    if (!text.trim() && !image) {
+    // Check if there's any content
+    if (!text?.trim() && !image) {
       showToast.warning('Add some text or an image to your post', 'Nothing to Post');
       return false;
     }
 
-    if (text.length > MAX_CHARS) {
+    // Check character limit
+    if (text && text.length > MAX_CHARS) {
       showToast.warning(`Post is too long. Maximum ${MAX_CHARS} characters allowed.`, 'Too Long');
       return false;
     }
 
+    // Department posts must have a level
     if (selectedDepartment && !selectedLevel) {
       showToast.warning('Please select a level for department posts', 'Level Required');
+      return false;
+    }
+
+    // Image must be valid base64
+    if (image && !image.startsWith('data:image/')) {
+      showToast.error('Invalid image format', 'Error');
       return false;
     }
 
@@ -208,17 +217,32 @@ export default function UploadScreen() {
       setSubmitting(true);
       
       const payload: any = {
-        text: text.trim(),
-        imageBase64: image,
-        category
+        category: category || 'All'
       };
 
-      if (selectedDepartment) {
-        payload.departmentId = selectedDepartment;
-        if (selectedLevel) {
-          payload.level = selectedLevel;
-        }
+      // Add text if present (trimmed)
+      if (text && text.trim()) {
+        payload.text = text.trim();
       }
+
+      // Add image if present
+      if (image) {
+        payload.imageBase64 = image;
+      }
+
+      // Add department and level if selected
+      if (selectedDepartment && selectedLevel) {
+        payload.departmentId = selectedDepartment;
+        payload.level = selectedLevel;
+      }
+
+      console.log('📤 Submitting post:', {
+        hasText: !!payload.text,
+        hasImage: !!payload.imageBase64,
+        category: payload.category,
+        departmentId: payload.departmentId || 'public',
+        level: payload.level || 'all'
+      });
 
       await postsAPI.create(payload);
       
