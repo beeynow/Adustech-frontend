@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image, ScrollView, Platform, StatusBar, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { postsAPI } from '../../services/postsApi';
@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { canPostToHome, getPermissionErrorMessage, getRoleBadgeColor, getRoleDisplayName } from '../../utils/permissions';
 import NotificationModal from '../../components/NotificationModal';
 import type { UserRole } from '../../utils/permissions';
+import { useFocusEffect } from '@react-navigation/native';
 
 interface Post {
   id: string;
@@ -43,28 +44,49 @@ export default function HomeScreen() {
     { id: '3', title: 'New Event', message: 'Check out the upcoming campus event', timestamp: new Date(Date.now() - 86400000), read: true, type: 'info' as const },
   ]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await postsAPI.list({ page: 1, limit: 10, category: activeCat !== 'All' ? activeCat : undefined, q: search || undefined });
-        const mapped = (data.posts || []).map((p: any) => ({
-          id: p._id,
-          author: p.userName,
-          category: p.category || 'All',
-          title: p.text?.slice(0,40) || 'Post',
-          content: p.text || '',
-          image: p.imageUrl || p.imageBase64 || undefined,
-          likes: (p.likes || []).length,
-          reposts: (p.reposts || []).length || 0,
-          comments: (p.comments || []).length,
-          liked: false,
-        }));
-        setPosts(mapped);
-      } catch (e) {
-        // fallback stays empty
-      }
-    })();
+  // Load posts function
+  const loadPosts = useCallback(async (showLoading = false) => {
+    if (showLoading) setRefreshing(true);
+    try {
+      const data = await postsAPI.list({ 
+        page: 1, 
+        limit: 10, 
+        category: activeCat !== 'All' ? activeCat : undefined, 
+        q: search || undefined 
+      });
+      const mapped = (data.posts || []).map((p: any) => ({
+        id: p.id || p._id,
+        author: p.userName,
+        category: p.category || 'All',
+        title: p.text?.slice(0,40) || 'Post',
+        content: p.text || '',
+        image: p.imageUrl || p.imageBase64 || undefined,
+        likes: (p.likes || []).length,
+        reposts: (p.reposts || []).length || 0,
+        comments: (p.comments || []).length,
+        liked: false,
+      }));
+      setPosts(mapped);
+      setPage(1); // Reset to page 1
+    } catch (e) {
+      console.log('Error loading posts:', e);
+    } finally {
+      if (showLoading) setRefreshing(false);
+    }
   }, [activeCat, search]);
+
+  // Load on mount and when category/search changes
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
+
+  // Reload posts when screen comes into focus (user navigates back)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔄 Home screen focused - refreshing posts');
+      loadPosts();
+    }, [loadPosts])
+  );
 
   const filtered = useMemo(() => {
     let list = posts;
@@ -236,14 +258,7 @@ export default function HomeScreen() {
         renderItem={renderItem}
         contentContainerStyle={{ padding: 12, paddingBottom: 96 }}
         refreshing={refreshing}
-        onRefresh={() => {
-          setRefreshing(true);
-          setTimeout(() => {
-            // Simulate refresh by shuffling
-            setPosts((prev) => [...prev].reverse());
-            setRefreshing(false);
-          }, 800);
-        }}
+        onRefresh={() => loadPosts(true)}
         onEndReachedThreshold={0.4}
         onEndReached={async () => {
           // Load next page from backend

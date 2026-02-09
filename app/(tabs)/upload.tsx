@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, Im
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { postsAPI } from '../../services/postsApi';
 import { departmentsAPI, Department } from '../../services/departmentsApi';
 import { showToast } from '../../utils/toast';
@@ -19,6 +20,7 @@ interface PostDraft {
 
 export default function UploadScreen() {
   const isDark = useColorScheme() === 'dark';
+  const router = useRouter();
   const [text, setText] = useState('');
   const [image, setImage] = useState<string | undefined>();
   const [category, setCategory] = useState('All');
@@ -244,7 +246,9 @@ export default function UploadScreen() {
         level: payload.level || 'all'
       });
 
-      await postsAPI.create(payload);
+      const response = await postsAPI.create(payload);
+      
+      console.log('✅ Post created successfully:', response);
       
       // Clear form and draft
       setText('');
@@ -257,6 +261,15 @@ export default function UploadScreen() {
       
       setSubmitting(false);
       showToast.success('Your post has been published! 🎉', 'Posted');
+      
+      // Navigate back to home to show the new post
+      console.log('📍 Navigating to home tab to show new post');
+      // Use router to navigate back to home tab
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/home' as any);
+      }
     } catch (e: any) {
       setSubmitting(false);
       showToast.error(e?.response?.data?.message || 'Failed to publish post', 'Error');
