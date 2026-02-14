@@ -52,6 +52,11 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_CALENDAR",
         "WRITE_CALENDAR"
       ],
       "splash": {
@@ -97,9 +102,16 @@
       "reactCompiler": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "YOUR_PROJECT_ID_HERE"
+        "projectId": "b2281a15-9a91-420f-8129-4348b0de616d"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b2281a15-9a91-420f-8129-4348b0de616d"
     }
   }
 }
