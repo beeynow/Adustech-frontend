@@ -27,9 +27,8 @@ export const postsAPI = {
     return res.data;
   },
   toggleRepost: async (id: string) => {
-    // Placeholder for repost functionality
-    console.log('Repost not yet implemented:', id);
-    return { message: 'Repost feature coming soon' };
+    const res = await api.post(`/posts/${id}/repost`);
+    return res.data;
   },
   get: async (id: string) => {
     const res = await api.get(`/posts/${id}`);
@@ -39,12 +38,12 @@ export const postsAPI = {
     const res = await api.get(`/posts/${id}/comments`);
     return res.data;
   },
-  addComment: async (id: string, text: string) => {
-    const res = await api.post(`/posts/${id}/comments`, { text });
+  addComment: async (id: string, text: string, parentId?: string) => {
+    const res = await api.post(`/posts/${id}/comments`, { text, parentId });
     return res.data;
   },
-  toggleLikeComment: async (id: string, commentId: string) => {
-    const res = await api.post(`/posts/${id}/comments/${commentId}/like`);
+  toggleLikeComment: async (postId: string, commentId: string) => {
+    const res = await api.post(`/posts/${postId}/comments/${commentId}/like`);
     return res.data;
   }
 };

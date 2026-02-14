@@ -1,229 +1,397 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity, Animated } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * ============================================================================
+ * INTEGRATED CHANNELS PAGE
+ * Bulletproof channels with auto profile integration
+ * Automatically shows channels for user's faculty, department, and level
+ * ============================================================================
+ */
 
-const CARDS = [
-  { key: 'channels', title: 'Channels', desc: 'Browse and join discussions', icon: 'chatbubbles-outline', color: '#1976D2' },
-  { key: 'events', title: 'Events', desc: 'Upcoming campus & dept. events', icon: 'calendar-outline', color: '#8E24AA' },
-  { key: 'timetable', title: 'Timetable', desc: 'Lectures and exam schedules', icon: 'time-outline', color: '#00897B' },
-  { key: 'invites', title: 'Invites', desc: 'Group and committee invites', icon: 'person-add-outline', color: '#F57C00' },
-  { key: 'info', title: 'Info', desc: 'Announcements & resources', icon: 'information-circle-outline', color: '#455A64' },
-  { key: 'support', title: 'Support', desc: 'Get help and report issues', icon: 'help-buoy-outline', color: '#D81B60' },
-];
+import React, { useState, useEffect, useContext } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  TextInput
+} from 'react-native';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { AuthContext } from '@/context/AuthContext';
+import integratedChannelsApi from '@/services/integratedChannelsApi';
 
-export default function ChannelsScreen() {
-  const STORAGE_KEY = 'channels_pins_v1';
-  const [order, setOrder] = useState<string[] | null>(null);
+export default function ChannelsPage() {
+  const { user } = useContext(AuthContext);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [myChannels, setMyChannels] = useState<any[]>([]);
+  const [recommended, setRecommended] = useState<any[]>([]);
+  const [showRecommended, setShowRecommended] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Load saved order
   useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const arr = JSON.parse(raw) as string[];
-          setOrder(arr);
-        } else {
-          setOrder(CARDS.map(c => c.key));
-        }
-      } catch {
-        setOrder(CARDS.map(c => c.key));
-      }
-    })();
+    loadChannels();
+    autoJoinChannels();
   }, []);
 
-  const saveOrder = async (arr: string[]) => {
-    setOrder(arr);
-    try { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); } catch {}
+  const autoJoinChannels = async () => {
+    try {
+      // Auto-join channels based on user profile
+      await integratedChannelsApi.autoJoinChannels();
+      console.log('✅ Auto-joined channels');
+    } catch (error) {
+      console.error('Error auto-joining channels:', error);
+    }
   };
 
-  const isDark = useColorScheme() === 'dark';
+  const loadChannels = async () => {
+    try {
+      setLoading(true);
 
-  const bg = isDark ? '#0A1929' : '#E6F4FE';
-  const card = isDark ? '#0F213A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
+      const [myChannelsData, recommendedData] = await Promise.all([
+        integratedChannelsApi.getMyChannels(),
+        integratedChannelsApi.getRecommendedChannels()
+      ]);
 
-  const router = useRouter();
-  const onPressCard = (key: string) => {
-    const map: Record<string, string> = {
-      channels: '/channels-list',
-      events: '/events',
-      timetable: '/timetable',
-      invites: '/invites',
-      info: '/info',
-      support: '/support',
-    };
-    const path = map[key] || '/channels-list';
-    router.push(path as any);
+      setMyChannels(myChannelsData.channels || []);
+      setRecommended(recommendedData.recommended || []);
+
+    } catch (error) {
+      console.error('Error loading channels:', error);
+      Alert.alert('Error', 'Failed to load channels');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const orderedCards = useMemo(() => {
-    const dict = Object.fromEntries(CARDS.map(c => [c.key, c] as const));
-    const base = order && order.length ? order : CARDS.map(c => c.key);
-    return base.map(k => dict[k]).filter(Boolean);
-  }, [order]);
-
-  const [reorderMode, setReorderMode] = useState(false);
-  const toastAnim = useState(new Animated.Value(0))[0];
-  const [toastMsg, setToastMsg] = useState('');
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
-      Animated.delay(900),
-      Animated.timing(toastAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start();
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadChannels();
+    setRefreshing(false);
   };
 
-  const onLongPressCard = (key: string) => {
-    if (!order) return;
-    const next = [key, ...order.filter(k => k !== key)];
-    saveOrder(next);
-    showToast('Pinned to top');
+  const handleJoinChannel = async (channelId: string) => {
+    try {
+      await integratedChannelsApi.joinChannel(channelId);
+      Alert.alert('Success', 'Joined channel successfully');
+      await loadChannels();
+    } catch (error: any) {
+      console.error('Error joining channel:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to join channel');
+    }
   };
 
-  if (reorderMode && orderedCards.length) {
-    const data = orderedCards.map(c => ({ ...c }));
-    const renderItem = ({ item, drag, isActive }: RenderItemParams<(typeof data)[number]>) => (
+  const getScopeIcon = (scope: string) => {
+    switch (scope) {
+      case 'global': return 'globe';
+      case 'faculty': return 'school';
+      case 'department': return 'business';
+      case 'level': return 'book';
+      default: return 'chatbubbles';
+    }
+  };
+
+  const getScopeColor = (scope: string) => {
+    switch (scope) {
+      case 'global': return '#1e88e5';
+      case 'faculty': return '#4caf50';
+      case 'department': return '#ff9800';
+      case 'level': return '#e91e63';
+      default: return '#757575';
+    }
+  };
+
+  const renderMyChannel = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      style={styles.channelCard}
+      onPress={() => router.push(`/channel/${item.id}`)}
+    >
+      <View style={[styles.scopeIcon, { backgroundColor: getScopeColor(item.scope) }]}>
+        <Ionicons name={getScopeIcon(item.scope)} size={24} color="#fff" />
+      </View>
+      
+      <View style={styles.channelInfo}>
+        <Text style={styles.channelName}>{item.name}</Text>
+        {item.description && (
+          <Text style={styles.channelDescription} numberOfLines={1}>
+            {item.description}
+          </Text>
+        )}
+        <View style={styles.channelMeta}>
+          <View style={styles.metaItem}>
+            <Ionicons name="people" size={14} color="#666" />
+            <Text style={styles.metaText}>{item.memberCount}</Text>
+          </View>
+          <View style={styles.scopeBadge}>
+            <Text style={styles.scopeText}>{item.scope}</Text>
+          </View>
+        </View>
+      </View>
+
+      <Ionicons name="chevron-forward" size={24} color="#999" />
+    </TouchableOpacity>
+  );
+
+  const renderRecommendedChannel = ({ item }: { item: any }) => (
+    <View style={styles.channelCard}>
+      <View style={[styles.scopeIcon, { backgroundColor: getScopeColor(item.scope) }]}>
+        <Ionicons name={getScopeIcon(item.scope)} size={24} color="#fff" />
+      </View>
+      
+      <View style={styles.channelInfo}>
+        <Text style={styles.channelName}>{item.name}</Text>
+        {item.description && (
+          <Text style={styles.channelDescription} numberOfLines={1}>
+            {item.description}
+          </Text>
+        )}
+      </View>
+
       <TouchableOpacity
-        onLongPress={drag}
-        disabled={isActive}
-        style={[styles.reorderRow, { backgroundColor: card, borderColor: border }]}
-        activeOpacity={0.8}
+        style={styles.joinButton}
+        onPress={() => handleJoinChannel(item.id)}
       >
-        <Ionicons name="reorder-three-outline" size={22} color={muted} />
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={[styles.cardTitle, { color: textPrimary }]}>{item.title}</Text>
-          <Text style={[styles.cardDesc, { color: muted }]}>{item.desc}</Text>
-        </View>
-        <Ionicons name={item.icon as any} size={20} color={muted} />
+        <Ionicons name="add-circle" size={28} color="#4caf50" />
       </TouchableOpacity>
-    );
+    </View>
+  );
 
+  const filteredChannels = myChannels.filter(channel =>
+    channel.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: bg }]}> 
-        <View style={styles.heroWrap}>
-          <Text style={[styles.heroTitle, { color: textPrimary }]}>Reorder</Text>
-          <Text style={[styles.heroSub, { color: muted }]}>Drag items to change their order.</Text>
-        </View>
-        <DraggableFlatList
-          key="reorder-list"
-          data={data}
-          keyExtractor={(item) => item.key}
-          onDragEnd={({ data: newData }) => saveOrder(newData.map(d => d.key))}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24 }}
-        />
-        <TouchableOpacity style={[styles.fab, { backgroundColor: isDark ? '#64B5F6' : '#1976D2' }]} onPress={() => setReorderMode(false)}>
-          <Ionicons name="checkmark" size={22} color="#fff" />
-        </TouchableOpacity>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1e88e5" />
+        <Text style={styles.loadingText}>Loading channels...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: bg }]}> 
-      <View style={styles.heroWrap}>
-        <Text style={[styles.heroTitle, { color: textPrimary }]}>Discover</Text>
-        <Text style={[styles.heroSub, { color: muted }]}>Explore channels, events, timetable, and more.</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Channels</Text>
+        <Text style={styles.headerSubtitle}>
+          Auto-joined based on your profile
+        </Text>
       </View>
 
-      <View style={styles.grid}> 
-        {orderedCards.map((c) => (
-          <TouchableOpacity
-            key={c.key}
-            style={[styles.card, { backgroundColor: card, borderColor: border }]}
-            activeOpacity={0.85}
-            onPress={() => onPressCard(c.key)}
-            onLongPress={() => onLongPressCard(c.key)}
-          >
-            <View style={[styles.iconWrap, { backgroundColor: `${c.color}22`, borderColor: `${c.color}55` }]}> 
-              <Ionicons name={c.icon as any} size={22} color={c.color} />
-            </View>
-            <Text style={[styles.cardTitle, { color: textPrimary }]}>{c.title}</Text>
-            <Text style={[styles.cardDesc, { color: muted }]}>{c.desc}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#999" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search channels..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
 
-      <View style={[styles.tip, { backgroundColor: card, borderColor: border }]}> 
-        <Ionicons name="sparkles-outline" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
-        <Text style={{ color: muted, marginLeft: 8, flex: 1 }}>Long press a card to pin it to the top</Text>
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, !showRecommended && styles.tabActive]}
+          onPress={() => setShowRecommended(false)}
+        >
+          <Text style={[styles.tabText, !showRecommended && styles.tabTextActive]}>
+            My Channels ({myChannels.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, showRecommended && styles.tabActive]}
+          onPress={() => setShowRecommended(true)}
+        >
+          <Text style={[styles.tabText, showRecommended && styles.tabTextActive]}>
+            Recommended ({recommended.length})
+          </Text>
+        </TouchableOpacity>
       </View>
-    </ScrollView>
+
+      <FlatList
+        data={showRecommended ? recommended : filteredChannels}
+        keyExtractor={(item) => item.id}
+        renderItem={showRecommended ? renderRecommendedChannel : renderMyChannel}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name={showRecommended ? "search" : "chatbubbles-outline"}
+              size={64}
+              color="#ccc"
+            />
+            <Text style={styles.emptyText}>
+              {showRecommended
+                ? 'No recommended channels'
+                : 'No channels yet'}
+            </Text>
+            {!showRecommended && (
+              <Text style={styles.emptySubtext}>
+                Channels will appear automatically
+              </Text>
+            )}
+          </View>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  heroWrap: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  heroTitle: { fontSize: 24, fontWeight: '800', letterSpacing: 0.5 },
-  heroSub: { marginTop: 2 },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    gap: 12,
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5'
   },
-  card: {
-    width: '48%',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666'
+  },
+  header: {
+    backgroundColor: '#1e88e5',
+    padding: 20,
+    paddingTop: 50
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff'
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.9,
+    marginTop: 4
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    margin: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3
   },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    marginBottom: 10,
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16
   },
-  cardTitle: { fontWeight: '800', fontSize: 16 },
-  cardDesc: { fontSize: 12 },
-  tip: {
-    marginTop: 16,
+  tabContainer: {
+    flexDirection: 'row',
     marginHorizontal: 16,
-    padding: 12,
+    marginBottom: 16,
+    backgroundColor: '#fff',
     borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    padding: 4
   },
-  reorderRow: {
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8
+  },
+  tabActive: {
+    backgroundColor: '#1e88e5'
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666'
+  },
+  tabTextActive: {
+    color: '#fff'
+  },
+  channelCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 12,
     padding: 16,
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 12
   },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
+  scopeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    alignItems: 'center',
+    marginRight: 12
   },
+  channelInfo: {
+    flex: 1
+  },
+  channelName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333'
+  },
+  channelDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2
+  },
+  channelMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4
+  },
+  scopeBadge: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4
+  },
+  scopeText: {
+    fontSize: 10,
+    color: '#666',
+    fontWeight: '600'
+  },
+  joinButton: {
+    padding: 4
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    minHeight: 300
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 16,
+    textAlign: 'center'
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center'
+  }
 });
