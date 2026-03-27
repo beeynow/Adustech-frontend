@@ -4,12 +4,17 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
+import { showToast } from '../utils/toast';
 
 interface AdminItem {
-  _id: string;
+  id: string;
   name: string;
   email: string;
   role: 'power' | 'admin' | 'd-admin';
+  managedDepartment?: {
+    id: string;
+    name: string;
+  } | null;
   createdAt?: string;
 }
 
@@ -24,7 +29,11 @@ export default function AdminManagementScreen() {
   const load = async () => {
     setLoading(true);
     const res = await authAPI.listAdmins();
-    if (res.success) setAdmins(res.data.admins || []);
+    if (res.success) {
+      setAdmins(res.data.admins || []);
+    } else {
+      showToast.error(res.message || 'Failed to load admin accounts.');
+    }
     setLoading(false);
   };
 
@@ -33,7 +42,11 @@ export default function AdminManagementScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     const res = await authAPI.listAdmins();
-    if (res.success) setAdmins(res.data.admins || []);
+    if (res.success) {
+      setAdmins(res.data.admins || []);
+    } else {
+      showToast.error(res.message || 'Failed to refresh admin accounts.');
+    }
     setRefreshing(false);
   }, []);
 
@@ -53,10 +66,10 @@ export default function AdminManagementScreen() {
           onPress: async () => {
             const res = await authAPI.demoteAdmin(email);
             if (res.success) {
-              Alert.alert('Success', res.data.message || 'Admin demoted');
+              showToast.success(res.data.message || 'Admin demoted.');
               onRefresh();
             } else {
-              Alert.alert('Error', res.message || 'Failed to demote');
+              showToast.error(res.message || 'Failed to demote admin.');
             }
           }
         }
@@ -92,7 +105,7 @@ export default function AdminManagementScreen() {
       </View>
 
       {admins.map((a) => (
-        <View key={a._id} style={[styles.item, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
+        <View key={a.id} style={[styles.item, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
           <View style={styles.itemLeft}>
             <View style={[styles.avatar, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
               <Text style={styles.avatarText}>{a.name?.charAt(0)?.toUpperCase() || '?'}</Text>
@@ -101,6 +114,11 @@ export default function AdminManagementScreen() {
               <Text style={[styles.name, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>{a.name}</Text>
               <Text style={[styles.email, { color: isDark ? '#90CAF9' : '#546E7A' }]}>{a.email}</Text>
               <Text style={[styles.role, { color: isDark ? '#B2DFDB' : '#00897B' }]}>{a.role}</Text>
+              {a.managedDepartment?.name ? (
+                <Text style={[styles.email, { color: isDark ? '#C5E1A5' : '#4B5563' }]}>
+                  {a.managedDepartment.name}
+                </Text>
+              ) : null}
             </View>
           </View>
 

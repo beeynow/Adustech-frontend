@@ -1,27 +1,92 @@
-// API Configuration
-// Update this based on your environment
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-// Detect platform and set appropriate API URL
-export const getApiUrl = () => {
-  // For development, change this to your backend URL
-  const BACKEND_URL = 'http://adustech-backend.vercel.app';
-  
-  // Uncomment the appropriate line based on your testing environment:
-  
-  // For iOS Simulator (default):
-  return `${BACKEND_URL}/api`;
-  
-  // For Android Emulator:
-  // return 'http://10.0.2.2:5000/api/auth';
-  
-  // For Physical Device (replace with your computer's IP):
-  // return 'http://192.168.x.x:5000/api/auth';
-  
-  // For Web:
-  // return 'http://localhost:5000/api/auth';
+type RuntimeEnvironment = 'development' | 'production' | 'test';
+
+const DEFAULT_PROD_BASE_URL = 'https://adustech-backend.vercel.app';
+
+const getExpoHostBaseUrl = (): string | undefined => {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants as any)?.manifest2?.extra?.expoClient?.hostUri ||
+    (Constants as any)?.manifest?.debuggerHost;
+
+  if (!hostUri || typeof hostUri !== 'string') {
+    return undefined;
+  }
+
+  const host = hostUri.split(':')[0];
+  if (!host) {
+    return undefined;
+  }
+
+  return `http://${host}:5000`;
 };
 
-// How to find your IP address:
-// Mac/Linux: Run in terminal: ifconfig | grep "inet " | grep -v 127.0.0.1
-// Windows: Run in terminal: ipconfig
-// Look for IPv4 Address (something like 192.168.x.x)
+const getDefaultDevBaseUrl = (): string => {
+  const expoHostBaseUrl = getExpoHostBaseUrl();
+  if (expoHostBaseUrl) {
+    return expoHostBaseUrl;
+  }
+
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:5000';
+  }
+  return 'http://localhost:5000';
+};
+
+const normalizeBaseUrl = (baseUrl: string): string => {
+  const trimmed = baseUrl.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new Error(`Invalid API base URL "${baseUrl}". Include http:// or https://`);
+  }
+  return trimmed;
+};
+
+const getRuntimeEnvironment = (): RuntimeEnvironment => {
+  if (__DEV__) {
+    return 'development';
+  }
+  return 'production';
+};
+
+const readEnvironmentBaseUrl = (): string | undefined => {
+  const fromPublicEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
+  if (fromPublicEnv) {
+    return fromPublicEnv;
+  }
+
+  const fromExpoExtra = (Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl;
+  return fromExpoExtra;
+};
+
+const enforceSecureTransportForProduction = (baseUrl: string, env: RuntimeEnvironment): string => {
+  if (env !== 'production') {
+    return baseUrl;
+  }
+
+  if (baseUrl.startsWith('http://')) {
+    return baseUrl.replace('http://', 'https://');
+  }
+
+  return baseUrl;
+};
+
+export const getApiBaseUrl = (): string => {
+  const env = getRuntimeEnvironment();
+  const configuredBaseUrl = readEnvironmentBaseUrl();
+  const fallbackBaseUrl = env === 'production' ? DEFAULT_PROD_BASE_URL : getDefaultDevBaseUrl();
+
+  return enforceSecureTransportForProduction(
+    normalizeBaseUrl(configuredBaseUrl || fallbackBaseUrl),
+    env
+  );
+};
+
+export const getApiUrl = (): string => `${getApiBaseUrl()}/api`;
+
+export const getRuntimeConfig = () => ({
+  environment: getRuntimeEnvironment(),
+  apiBaseUrl: getApiBaseUrl(),
+  apiUrl: getApiUrl(),
+});

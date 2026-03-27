@@ -6,7 +6,14 @@ export interface Department {
   code: string;
   description?: string;
   faculty?: string;
+  facultyId?: string;
   levels: string[];
+  levelRecords?: Array<{
+    id: string;
+    levelNumber: number;
+    displayName: string;
+    isActive: boolean;
+  }>;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +66,7 @@ export const departmentsAPI = {
     code: string;
     description?: string;
     faculty?: string;
+    facultyId?: string;
     levels?: string[];
   }) => {
     const res = await api.post('/departments', payload);
@@ -71,6 +79,7 @@ export const departmentsAPI = {
     code: string;
     description: string;
     faculty: string;
+    facultyId: string;
     levels: string[];
     isActive: boolean;
   }>) => {

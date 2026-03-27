@@ -1,11 +1,13 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, startTransition, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../services/api';
+import type { UserRole } from '../utils/permissions';
+import { normalizeEmail } from '../utils/validation';
 
 interface User {
   name: string;
   email: string;
-  role?: 'power' | 'admin' | 'd-admin' | 'user';
+  role?: UserRole;
 }
 
 interface AuthContextType {
@@ -19,109 +21,172 @@ interface AuthContextType {
   forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   resetPassword: (email: string, token: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
+  refreshSession: () => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
+const STORAGE_KEYS = {
+  user: 'user',
+  pendingEmail: 'pendingEmail',
+  resetEmail: 'resetEmail',
+} as const;
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const sanitizeUser = (raw: any, fallbackEmail?: string): User | null => {
+  if (!raw && !fallbackEmail) {
+    return null;
+  }
+
+  const email = typeof raw?.email === 'string' ? raw.email : fallbackEmail;
+  if (!email) {
+    return null;
+  }
+
+  return {
+    name: typeof raw?.name === 'string' && raw.name.trim().length > 0
+      ? raw.name.trim()
+      : normalizeEmail(email).split('@')[0],
+    email: normalizeEmail(email),
+    role: raw?.role,
+  };
+};
+
+const parseUserFromMeResponse = (payload: any): User | null => {
+  const directUser = payload?.user;
+  const nestedUser = payload?.data?.user;
+  const candidate = directUser || nestedUser || payload;
+  return sanitizeUser(candidate);
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check if user is logged in on app start
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
+  const clearAuthStorage = async () => {
+    await AsyncStorage.multiRemove([
+      STORAGE_KEYS.user,
+      STORAGE_KEYS.pendingEmail,
+      STORAGE_KEYS.resetEmail,
+    ]);
+  };
+
+  const refreshSession = async (): Promise<boolean> => {
+    const me = await authAPI.me();
+    if (!me.success) {
+      startTransition(() => setUser(null));
+      await AsyncStorage.removeItem(STORAGE_KEYS.user);
+      return false;
+    }
+
+    const hydratedUser = parseUserFromMeResponse(me.data);
+    if (!hydratedUser) {
+      startTransition(() => setUser(null));
+      await AsyncStorage.removeItem(STORAGE_KEYS.user);
+      return false;
+    }
+
+    startTransition(() => setUser(hydratedUser));
+    await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(hydratedUser));
+    return true;
+  };
 
   const checkAuthStatus = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        const parsed = JSON.parse(userData);
-        setUser(parsed);
-        console.log('Auth status loaded:', parsed);
-      } else {
-        console.log('No user data found in storage');
+      const rawUser = await AsyncStorage.getItem(STORAGE_KEYS.user);
+      if (!rawUser) {
+        startTransition(() => setUser(null));
+        return;
       }
-    } catch (error) {
-      console.error('Error checking auth status:', error);
+
+      const parsedLocalUser = sanitizeUser(JSON.parse(rawUser));
+      if (!parsedLocalUser) {
+        await AsyncStorage.removeItem(STORAGE_KEYS.user);
+        startTransition(() => setUser(null));
+        return;
+      }
+
+      startTransition(() => setUser(parsedLocalUser));
+      await refreshSession();
+    } catch {
+      await clearAuthStorage();
+      startTransition(() => setUser(null));
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
   const register = async (name: string, email: string, password: string) => {
-    const result = await authAPI.register(name, email, password);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await authAPI.register(name.trim(), normalizedEmail, password);
     if (result.success) {
-      // Store email for OTP verification
-      await AsyncStorage.setItem('pendingEmail', email);
+      await AsyncStorage.setItem(STORAGE_KEYS.pendingEmail, normalizedEmail);
       return { success: true, message: result.data.message };
     }
     return { success: false, message: result.message };
   };
 
   const verifyOTP = async (email: string, otp: string) => {
-    const result = await authAPI.verifyOTP(email, otp);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await authAPI.verifyOTP(normalizedEmail, otp.trim());
     if (result.success) {
-      // Clear pending email
-      await AsyncStorage.removeItem('pendingEmail');
+      await AsyncStorage.removeItem(STORAGE_KEYS.pendingEmail);
       return { success: true, message: result.data.message };
     }
     return { success: false, message: result.message };
   };
 
   const resendOTP = async (email: string) => {
-    const result = await authAPI.resendOTP(email);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await authAPI.resendOTP(normalizedEmail);
     return result;
   };
 
   const login = async (email: string, password: string) => {
-    const result = await authAPI.login(email, password);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await authAPI.login(normalizedEmail, password);
     if (result.success) {
-      // Extract user data from response
-      const name = result.data.user?.name || email.split('@')[0];
-      const role = result.data.user?.role as User['role'] | undefined;
-      const userData: User = { 
-        name, 
-        email: result.data.user?.email || email, 
-        role 
-      };
-      
-      // Save user data to state and AsyncStorage
-      setUser(userData);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
-      
-      // Log for debugging
-      console.log('User logged in and saved:', userData);
-      
+      const mappedUser = sanitizeUser(result.data?.user, normalizedEmail);
+      if (!mappedUser) {
+        return { success: false, message: 'Invalid account data returned by server.' };
+      }
+
+      startTransition(() => setUser(mappedUser));
+      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
       return { success: true, message: result.data.message };
     }
-    // Store email for potential OTP verification
+
     if (result.message?.includes('Email not verified') || result.message?.includes('verify OTP')) {
-      await AsyncStorage.setItem('pendingEmail', email);
+      await AsyncStorage.setItem(STORAGE_KEYS.pendingEmail, normalizedEmail);
     }
     return { success: false, message: result.message };
   };
 
   const logout = async () => {
     await authAPI.logout();
-    setUser(null);
-    await AsyncStorage.removeItem('user');
+    startTransition(() => setUser(null));
+    await clearAuthStorage();
   };
 
   const forgotPassword = async (email: string) => {
-    const result = await authAPI.forgotPassword(email);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await authAPI.forgotPassword(normalizedEmail);
     if (result.success) {
-      await AsyncStorage.setItem('resetEmail', email);
+      await AsyncStorage.setItem(STORAGE_KEYS.resetEmail, normalizedEmail);
       return { success: true, message: result.data.message };
     }
     return { success: false, message: result.message };
   };
 
   const resetPassword = async (email: string, token: string, newPassword: string) => {
-    const result = await authAPI.resetPassword(email, token, newPassword);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await authAPI.resetPassword(normalizedEmail, token.trim(), newPassword);
     if (result.success) {
-      await AsyncStorage.removeItem('resetEmail');
+      await AsyncStorage.removeItem(STORAGE_KEYS.resetEmail);
       return { success: true, message: result.data.message };
     }
     return { success: false, message: result.message };
@@ -148,6 +213,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         forgotPassword,
         resetPassword,
         changePassword,
+        refreshSession,
         logout,
       }}
     >

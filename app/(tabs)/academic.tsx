@@ -6,7 +6,7 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,11 +18,11 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '@/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import academicApi from '@/services/academicApi';
 
 export default function AcademicPage() {
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [faculty, setFaculty] = useState<any>(null);
@@ -37,25 +37,18 @@ export default function AcademicPage() {
   const loadAcademicStructure = async () => {
     try {
       setLoading(true);
+      const contextData = await academicApi.getUserAcademicContext();
+      const academicContext = contextData?.context || {};
 
-      // Load user's faculty, department, and available levels
-      if (user?.facultyId) {
-        const facultyData = await academicApi.getFaculty(user.facultyId);
-        setFaculty(facultyData.faculty);
-      }
+      setFaculty(academicContext.faculty || null);
+      setDepartment(academicContext.department || null);
+      setUserLevel(academicContext.level || null);
 
-      if (user?.departmentId) {
-        const deptData = await academicApi.getDepartment(user.departmentId);
-        setDepartment(deptData.department);
-
-        // Load all levels for the department (100-500)
-        const levelsData = await academicApi.getDepartmentLevels(user.departmentId);
+      if (academicContext.department?.id) {
+        const levelsData = await academicApi.getDepartmentLevels(academicContext.department.id);
         setLevels(levelsData.levels || []);
-      }
-
-      if (user?.levelId) {
-        const levelData = await academicApi.getLevel(user.levelId);
-        setUserLevel(levelData.level);
+      } else {
+        setLevels([]);
       }
 
     } catch (error) {
@@ -77,7 +70,7 @@ export default function AcademicPage() {
 
   const navigateToFacultyPosts = () => {
     if (faculty) {
-      router.push(`/academic/faculty/${faculty.id}`);
+      router.push(`/faculty-channel/${faculty.id}`);
     }
   };
 
@@ -162,7 +155,7 @@ export default function AcademicPage() {
 
           <View style={styles.levelsGrid}>
             {levels.map((level) => {
-              const isUserLevel = level.id === user?.levelId;
+              const isUserLevel = level.id === userLevel?.id;
               return (
                 <TouchableOpacity
                   key={level.id}
@@ -204,7 +197,7 @@ export default function AcademicPage() {
       )}
 
       {/* Quick Actions */}
-      {['admin', 'power_admin', 'd_admin'].includes(user?.role || '') && (
+      {['admin', 'power', 'd-admin'].includes(user?.role || '') && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Admin Actions</Text>
           <TouchableOpacity

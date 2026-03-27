@@ -1,11 +1,4 @@
-/**
- * ============================================================================
- * INTEGRATED CHANNELS API SERVICE
- * Bulletproof channels system with auto profile integration
- * ============================================================================
- */
-
-import api from './api';
+import api, { getErrorMessage } from './api';
 
 interface CreateChannelData {
   name: string;
@@ -18,165 +11,143 @@ interface SendMessageData {
   content: string;
 }
 
+const fail = (error: unknown, fallback: string): never => {
+  throw new Error(getErrorMessage(error, fallback));
+};
+
 export const integratedChannelsApi = {
-  // ============================================================================
-  // CHANNEL MANAGEMENT
-  // ============================================================================
-  
-  /**
-   * Auto-join channels based on user profile
-   * Called automatically after login/profile update
-   */
   autoJoinChannels: async () => {
     try {
       const response = await api.post('/integrated-channels/auto-join');
       return response.data;
-    } catch (error: any) {
-      console.error('Error auto-joining channels:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to auto-join channels.');
     }
   },
 
-  /**
-   * Get all available channels with membership status
-   */
   getAllChannels: async () => {
     try {
       const response = await api.get('/integrated-channels');
       return response.data;
-    } catch (error: any) {
-      console.error('Error fetching all channels:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to fetch channels.');
     }
   },
 
-  /**
-   * Get channels user is a member of
-   */
   getMyChannels: async () => {
     try {
       const response = await api.get('/integrated-channels/my-channels');
       return response.data;
-    } catch (error: any) {
-      console.error('Error fetching my channels:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to fetch your channels.');
     }
   },
 
-  /**
-   * Get recommended channels based on user profile
-   */
+  getFacultyRoom: async (facultyId: string) => {
+    try {
+      const response = await api.get(`/integrated-channels/faculty/${facultyId}`);
+      return response.data;
+    } catch (error) {
+      fail(error, 'Failed to fetch faculty room.');
+    }
+  },
+
+  getDepartmentRoom: async (departmentId: string) => {
+    try {
+      const response = await api.get(`/integrated-channels/department/${departmentId}`);
+      return response.data;
+    } catch (error) {
+      fail(error, 'Failed to fetch department room.');
+    }
+  },
+
+  getLevelRoom: async (levelId: string) => {
+    try {
+      const response = await api.get(`/integrated-channels/level/${levelId}`);
+      return response.data;
+    } catch (error) {
+      fail(error, 'Failed to fetch level room.');
+    }
+  },
+
   getRecommendedChannels: async () => {
     try {
       const response = await api.get('/integrated-channels/recommended');
       return response.data;
-    } catch (error: any) {
-      console.error('Error fetching recommended channels:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to fetch recommended channels.');
     }
   },
 
-  /**
-   * Create a new channel (auto-associated with user profile)
-   */
   createChannel: async (channelData: CreateChannelData) => {
     try {
       const response = await api.post('/integrated-channels', channelData);
       return response.data;
-    } catch (error: any) {
-      console.error('Error creating channel:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to create channel.');
     }
   },
 
-  /**
-   * Join a channel
-   */
   joinChannel: async (channelId: string) => {
     try {
       const response = await api.post(`/integrated-channels/${channelId}/join`);
       return response.data;
-    } catch (error: any) {
-      console.error('Error joining channel:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to join channel.');
     }
   },
 
-  /**
-   * Leave a channel
-   */
   leaveChannel: async (channelId: string) => {
     try {
       const response = await api.post(`/integrated-channels/${channelId}/leave`);
       return response.data;
-    } catch (error: any) {
-      console.error('Error leaving channel:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to leave channel.');
     }
   },
 
-  // ============================================================================
-  // MESSAGES
-  // ============================================================================
-  
-  /**
-   * Send message to channel
-   */
   sendMessage: async (channelId: string, messageData: SendMessageData) => {
     try {
       const response = await api.post(`/integrated-channels/${channelId}/messages`, messageData);
       return response.data;
-    } catch (error: any) {
-      console.error('Error sending message:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to send message.');
     }
   },
 
-  /**
-   * Get channel messages
-   */
-  getChannelMessages: async (channelId: string, page: number = 1, limit: number = 50) => {
+  getChannelMessages: async (channelId: string, page = 1, limit = 50) => {
     try {
       const response = await api.get(`/integrated-channels/${channelId}/messages`, {
-        params: { page, limit }
+        params: { page, limit },
       });
       return response.data;
-    } catch (error: any) {
-      console.error('Error fetching channel messages:', error);
-      throw error;
+    } catch (error) {
+      fail(error, 'Failed to fetch channel messages.');
     }
   },
 
-  // ============================================================================
-  // CHANNEL CONTEXT HELPERS
-  // ============================================================================
-  
-  /**
-   * Get channel by scope (returns appropriate channel for user's context)
-   */
   getChannelByScope: async (scope: 'global' | 'faculty' | 'department' | 'level') => {
     try {
-      const channels = await api.get('/integrated-channels/my-channels');
-      const filtered = channels.data.channels.filter((ch: any) => ch.scope === scope);
-      return filtered;
-    } catch (error: any) {
-      console.error('Error fetching channels by scope:', error);
-      throw error;
+      const channelsResponse = await api.get('/integrated-channels/my-channels');
+      return (channelsResponse.data?.channels || []).filter((channel: any) => channel.scope === scope);
+    } catch (error) {
+      fail(error, 'Failed to fetch scoped channels.');
     }
   },
 
-  /**
-   * Get user's level channel (for department level room)
-   */
   getUserLevelChannel: async () => {
     try {
-      const response = await api.get('/integrated-channels/my-level-channel');
-      return response.data;
-    } catch (error: any) {
-      console.error('Error fetching level channel:', error);
-      throw error;
+      const channelsResponse = await api.get('/integrated-channels/my-channels');
+      const levelChannel = (channelsResponse.data?.channels || []).find((channel: any) => channel.scope === 'level');
+
+      return {
+        success: true,
+        channel: levelChannel || null,
+      };
+    } catch (error) {
+      fail(error, 'Failed to fetch level channel.');
     }
-  }
+  },
 };
 
 export default integratedChannelsApi;

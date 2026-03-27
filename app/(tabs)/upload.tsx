@@ -60,8 +60,8 @@ export default function UploadScreen() {
       setLoadingDepartments(true);
       const response = await departmentsAPI.list({ isActive: true });
       setDepartments(response.departments || []);
-    } catch (error) {
-      console.error('Error loading departments:', error);
+    } catch {
+      showToast.error('Unable to load departments right now.');
     } finally {
       setLoadingDepartments(false);
     }
@@ -93,16 +93,16 @@ export default function UploadScreen() {
           clearDraft();
         }
       }
-    } catch (error) {
-      console.error('Error loading draft:', error);
+    } catch {
+      showToast.error('Unable to restore your saved draft.');
     }
   };
 
   const clearDraft = async () => {
     try {
       await AsyncStorage.removeItem(DRAFT_KEY);
-    } catch (error) {
-      console.error('Error clearing draft:', error);
+    } catch {
+      showToast.error('Unable to clear the saved draft.');
     }
   };
 
@@ -238,17 +238,7 @@ export default function UploadScreen() {
         payload.level = selectedLevel;
       }
 
-      console.log('📤 Submitting post:', {
-        hasText: !!payload.text,
-        hasImage: !!payload.imageBase64,
-        category: payload.category,
-        departmentId: payload.departmentId || 'public',
-        level: payload.level || 'all'
-      });
-
       const response = await postsAPI.create(payload);
-      
-      console.log('✅ Post created successfully:', response);
       
       // Clear form and draft
       setText('');
@@ -261,10 +251,7 @@ export default function UploadScreen() {
       
       setSubmitting(false);
       showToast.success('Your post has been published! 🎉', 'Posted');
-      
-      // Navigate back to home to show the new post
-      console.log('📍 Navigating to home tab to show new post');
-      // Use router to navigate back to home tab
+
       if (router.canGoBack()) {
         router.back();
       } else {

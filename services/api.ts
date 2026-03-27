@@ -1,207 +1,260 @@
-import axios from 'axios';
-import { getApiUrl } from './config';
+import axios, { AxiosError, AxiosInstance } from 'axios';
+import { getRuntimeConfig } from './config';
 
-const API_URL = getApiUrl();
+type ApiLogLevel = 'debug' | 'warn' | 'error';
 
-console.log('🌐 API URL configured:', API_URL);
+const runtimeConfig = getRuntimeConfig();
+const isProduction = runtimeConfig.environment === 'production';
 
-const api = axios.create({
-  baseURL: API_URL,
+const log = (level: ApiLogLevel, message: string, payload?: unknown) => {
+  if (isProduction && level === 'debug') {
+    return;
+  }
+
+  if (level === 'error') {
+    console.error(message, payload);
+    return;
+  }
+
+  if (level === 'warn') {
+    console.warn(message, payload);
+    return;
+  }
+
+  console.log(message, payload);
+};
+
+export class ApiError extends Error {
+  status?: number;
+  code?: string;
+  details?: unknown;
+
+  constructor(message: string, options?: { status?: number; code?: string; details?: unknown }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = options?.status;
+    this.code = options?.code;
+    this.details = options?.details;
+  }
+}
+
+const toApiError = (error: unknown, fallbackMessage: string): ApiError => {
+  if (error instanceof ApiError) {
+    return error;
+  }
+
+  const axiosError = error as AxiosError<{ message?: string }>;
+  const message =
+    axiosError.response?.data?.message ||
+    axiosError.message ||
+    fallbackMessage;
+
+  return new ApiError(message, {
+    status: axiosError.response?.status,
+    code: axiosError.code,
+    details: axiosError.response?.data,
+  });
+};
+
+export const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
+  return toApiError(error, fallbackMessage).message;
+};
+
+const api: AxiosInstance = axios.create({
+  baseURL: runtimeConfig.apiUrl,
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   },
-  timeout: 10000, // 10 seconds
-  withCredentials: true, // Enable sending cookies with requests
+  timeout: 15000,
+  withCredentials: true,
 });
 
-// Add request interceptor for debugging
 api.interceptors.request.use(
   (config) => {
-    console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    log('debug', `API -> ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     return config;
   },
   (error) => {
-    console.error('Request error:', error);
-    return Promise.reject(error);
+    const apiError = toApiError(error, 'Failed to prepare request.');
+    log('error', 'API request setup error', apiError);
+    return Promise.reject(apiError);
   }
 );
 
-// Add response interceptor for debugging
 api.interceptors.response.use(
   (response) => {
-    console.log(`✅ ${response.config.url} - Status: ${response.status}`);
+    log('debug', `API <- ${response.status} ${response.config.url}`);
     return response;
   },
   (error) => {
-    if (error.code === 'ECONNABORTED') {
-      console.error('❌ Request timeout - Check if backend is running');
-    } else if (error.message === 'Network Error') {
-      console.error('❌ Network Error - Check API URL and backend connection');
+    const apiError = toApiError(error, 'Request failed. Please try again.');
+
+    if (apiError.code === 'ECONNABORTED') {
+      log('warn', 'API timeout error', apiError);
+    } else if (apiError.message.toLowerCase().includes('network')) {
+      log('warn', 'API network error', apiError);
     } else {
-      console.error(`❌ ${error.config?.url} - ${error.response?.status || error.message}`);
+      log('error', 'API response error', apiError);
     }
-    return Promise.reject(error);
+
+    return Promise.reject(apiError);
   }
 );
 
-// API Methods
 export const authAPI = {
-  // Register new user
   register: async (name: string, email: string, password: string) => {
     try {
-      console.log('Attempting registration...', { name, email });
       const response = await api.post('/auth/register', { name, email, password });
-      console.log('Registration response:', response.data);
       return { success: true, data: response.data };
-    } catch (error: any) {
-      console.error('Registration error:', error.response?.data || error.message);
-      return { 
-        success: false, 
-        message: error.response?.data?.message || error.message || 'Registration failed. Please try again.' 
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Registration failed. Please try again.'),
       };
     }
   },
 
-  // Verify OTP
   verifyOTP: async (email: string, otp: string) => {
     try {
       const response = await api.post('/auth/verify-otp', { email, otp });
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'OTP verification failed.' 
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'OTP verification failed.'),
       };
     }
   },
 
-  // Resend OTP
   resendOTP: async (email: string) => {
     try {
       const response = await api.post('/auth/resend-otp', { email });
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Failed to resend OTP.' 
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Failed to resend OTP.'),
       };
     }
   },
 
-  // Login user
   login: async (email: string, password: string) => {
     try {
       const response = await api.post('/auth/login', { email, password });
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Login failed. Please check your credentials.' 
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Login failed. Please check your credentials.'),
       };
     }
   },
 
-  // Logout user
   logout: async () => {
     try {
       const response = await api.post('/auth/logout');
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Logout failed.' 
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Logout failed.'),
       };
     }
   },
 
-  // Forgot password - request reset code
   forgotPassword: async (email: string) => {
     try {
       const response = await api.post('/auth/forgot-password', { email });
       return { success: true, data: response.data };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to initiate password reset.'
+        message: getErrorMessage(error, 'Failed to initiate password reset.'),
       };
     }
   },
 
-  // Reset password with code
   resetPassword: async (email: string, token: string, newPassword: string) => {
     try {
       const response = await api.post('/auth/reset-password', { email, token, newPassword });
       return { success: true, data: response.data };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to reset password.'
+        message: getErrorMessage(error, 'Failed to reset password.'),
       };
     }
   },
 
-  // Change password (authenticated)
   changePassword: async (currentPassword: string, newPassword: string) => {
     try {
       const response = await api.post('/auth/change-password', { currentPassword, newPassword });
       return { success: true, data: response.data };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to change password.'
+        message: getErrorMessage(error, 'Failed to change password.'),
       };
     }
   },
 
- // Create admin (power only)
- createAdmin: async (payload: { name: string; email: string; password: string; role: 'admin' | 'd-admin' }) => {
-   try {
-     const response = await api.post('/auth/create-admin', payload);
-     return { success: true, data: response.data };
-   } catch (error: any) {
-     return { success: false, message: error.response?.data?.message || 'Failed to create admin.' };
-   }
- },
+  createAdmin: async (payload: { name: string; email: string; password: string; role: 'admin' | 'd-admin'; departmentId?: string }) => {
+    try {
+      const response = await api.post('/auth/create-admin', payload);
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Failed to create admin.'),
+      };
+    }
+  },
 
-  // List admins (power only)
   listAdmins: async () => {
     try {
       const response = await api.get('/auth/admins');
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { success: false, message: error.response?.data?.message || 'Failed to list admins.' };
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Failed to list admins.'),
+      };
     }
   },
 
-  // Demote admin (power only)
   demoteAdmin: async (email: string) => {
     try {
       const response = await api.post('/auth/demote-admin', { email });
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { success: false, message: error.response?.data?.message || 'Failed to demote admin.' };
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Failed to demote admin.'),
+      };
     }
   },
 
-  // Who am I (session check)
   me: async () => {
     try {
       const response = await api.get('/auth/me');
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { success: false, message: error.response?.data?.message || 'Not authenticated' };
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Not authenticated'),
+      };
     }
   },
 
-  // Get dashboard (protected route)
   getDashboard: async () => {
     try {
       const response = await api.get('/auth/dashboard');
       return { success: true, data: response.data };
-    } catch (error: any) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Failed to fetch dashboard data.' 
+    } catch (error) {
+      return {
+        success: false,
+        message: getErrorMessage(error, 'Failed to fetch dashboard data.'),
       };
     }
   },

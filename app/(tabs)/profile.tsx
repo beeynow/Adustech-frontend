@@ -30,7 +30,6 @@ export default function ProfileScreen() {
   const [autoSave, setAutoSave] = useState(true);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Form state
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
   const [level, setLevel] = useState('');
@@ -43,11 +42,10 @@ export default function ProfileScreen() {
   const [country, setCountry] = useState('');
   const [profileImage, setProfileImage] = useState('');
 
-  // Validation state
   const [errors, setErrors] = useState<{ [k: string]: string | undefined }>({});
 
-  const levels = useMemo(() => ['100','200','300','400','500'], []);
-  const genders = useMemo(() => ['Male','Female','Other'] as const, []);
+  const levels = useMemo(() => ['100', '200', '300', '400', '500'], []);
+  const genders = useMemo(() => ['Male', 'Female', 'Other'] as const, []);
 
   useEffect(() => {
     loadProfile();
@@ -67,7 +65,7 @@ export default function ProfileScreen() {
       setFaculty(u.faculty || '');
       setPhone(u.phone || '');
       setGender((u.gender as any) || '');
-      setDateOfBirth(u?.dateOfBirth ? new Date(u.dateOfBirth as any).toISOString().slice(0,10) : '');
+      setDateOfBirth(u?.dateOfBirth ? new Date(u.dateOfBirth as any).toISOString().slice(0, 10) : '');
       setAddress(u.address || '');
       setCountry(u.country || '');
       setProfileImage(u.profileImage || '');
@@ -80,7 +78,7 @@ export default function ProfileScreen() {
     if (!name.trim()) next.name = 'Full name is required';
     if (phone && !/^\+?[0-9\-\s]{7,15}$/.test(phone)) next.phone = 'Enter a valid phone number';
     if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) next.dateOfBirth = 'Use format YYYY-MM-DD';
-    if (level && !levels.includes(level)) next.level = 'Level should be one of ' + levels.join(', ');
+    if (level && !levels.includes(level)) next.level = `Level should be one of ${levels.join(', ')}`;
     if (gender && !genders.includes(gender)) next.gender = 'Gender must be Male, Female or Other';
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -143,309 +141,257 @@ export default function ProfileScreen() {
       if (!silent) setEditing(false);
       loadProfile();
       return { success: true };
-    } else {
-      if (!silent) showToast.error(result.message || 'Failed to update profile', 'Error');
-      return { success: false };
     }
+
+    if (!silent) showToast.error(result.message || 'Failed to update profile', 'Error');
+    return { success: false };
   };
 
   if (loading) {
     return (
-      <View style={[styles.center, styles.flex, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
-        <ActivityIndicator size="large" color={isDark ? '#42A5F5' : '#1976D2'} />
+      <View style={[styles.center, styles.flex, { backgroundColor: isDark ? '#06152A' : '#EEF4FF' }]}> 
+        <ActivityIndicator size="large" color={isDark ? '#60A5FA' : '#1D4ED8'} />
       </View>
     );
   }
 
-  const headerGradient = isDark ? ['#0A1929', '#102B4C'] : ['#1976D2', '#42A5F5'];
-  const cardBg = isDark ? '#0F213A' : '#FFFFFF';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
+  const headerGradient = isDark ? ['#06152A', '#0C2A4F'] : ['#1D4ED8', '#3B82F6'];
+  const appBg = isDark ? '#06152A' : '#EEF4FF';
+  const cardBg = isDark ? '#0D223D' : '#FFFFFF';
+  const textPrimary = isDark ? '#ECF3FF' : '#0F172A';
+  const muted = isDark ? '#9CB7D9' : '#64748B';
+  const border = isDark ? '#1E3A5F' : '#DCE6F7';
+
+  const completionFields = [name, bio, level, department, faculty, phone, gender, dateOfBirth, address, country, profileImage];
+  const completion = Math.round((completionFields.filter((v) => (v || '').toString().trim().length > 0).length / completionFields.length) * 100);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }}>
-      {/* Header */}
-      <LinearGradient colors={headerGradient} style={styles.headerWrap}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
+    <ScrollView style={{ flex: 1, backgroundColor: appBg }} contentContainerStyle={{ paddingBottom: 24 }}>
+      <LinearGradient colors={headerGradient} style={styles.heroWrap}>
+        <View style={styles.heroTopRow}>
+          <TouchableOpacity onPress={pickImage} activeOpacity={0.85}>
             {profileImage ? (
               <Image source={{ uri: profileImage }} style={styles.avatar} />
             ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}> 
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarInitial}>{(name || profile?.name || '?').charAt(0).toUpperCase()}</Text>
               </View>
             )}
-            {editing && (
+            {editing ? (
               <View style={styles.cameraBadge}>
-                <Ionicons name="camera" size={16} color="#FFFFFF" />
+                <Ionicons name="camera" size={15} color="#FFFFFF" />
               </View>
-            )}
+            ) : null}
           </TouchableOpacity>
 
-          <View style={styles.headerText}>
-            <Text style={[styles.displayName, { color: '#FFFFFF' }]} numberOfLines={1}>
-              {name || profile?.name || 'User'}
-            </Text>
-            <Text style={[styles.emailText, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
-              {profile?.email}
-            </Text>
+          <View style={styles.heroInfo}>
+            <Text style={styles.displayName} numberOfLines={1}>{name || profile?.name || 'Student'}</Text>
+            <Text style={styles.emailText} numberOfLines={1}>{profile?.email}</Text>
             <View style={styles.badgesRow}>
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.35)' }]}>
-                <Ionicons name="ribbon-outline" size={14} color="#FFFFFF" />
-                <Text style={styles.badgeText}>{user?.role || 'user'}</Text>
+              <View style={styles.heroBadge}>
+                <Ionicons name="school-outline" size={13} color="#E6F0FF" />
+                <Text style={styles.heroBadgeText}>{department || 'Department not set'}</Text>
               </View>
-              {level ? (
-                <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.35)' }]}>
-                  <Ionicons name="school-outline" size={14} color="#FFFFFF" />
-                  <Text style={styles.badgeText}>Level {level}</Text>
-                </View>
-              ) : null}
+              <View style={styles.heroBadge}>
+                <Ionicons name="ribbon-outline" size={13} color="#E6F0FF" />
+                <Text style={styles.heroBadgeText}>{user?.role || 'user'}</Text>
+              </View>
             </View>
           </View>
 
-          <TouchableOpacity
-            onPress={() => setEditing((e) => !e)}
-            style={[styles.editToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.2)' }]}
-          >
-            <Ionicons name={editing ? 'close' : 'create-outline'} size={18} color="#FFFFFF" />
+          <TouchableOpacity onPress={() => setEditing((e) => !e)} style={styles.editToggle}>
+            <Ionicons name={editing ? 'close' : 'create-outline'} size={17} color="#FFFFFF" />
             <Text style={styles.editToggleText}>{editing ? 'Cancel' : 'Edit'}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Auto-save toggle */}
-        {editing && (
+        <View style={styles.completionWrap}>
+          <View style={styles.completionHeader}>
+            <Text style={styles.completionLabel}>Profile Completion</Text>
+            <Text style={styles.completionPercent}>{completion}%</Text>
+          </View>
+          <View style={styles.completionTrack}>
+            <View style={[styles.completionFill, { width: `${completion}%` }]} />
+          </View>
+        </View>
+
+        {editing ? (
           <View style={styles.autoRow}>
-            <Text style={{ color: 'rgba(255,255,255,0.9)' }}>Auto-save</Text>
-            <TouchableOpacity
-              onPress={() => setAutoSave((v) => !v)}
-              style={[styles.toggle, { borderColor: 'rgba(255,255,255,0.6)' }, autoSave && styles.toggleOn]}
-            >
+            <Text style={styles.autoRowLabel}>Auto-save</Text>
+            <TouchableOpacity onPress={() => setAutoSave((v) => !v)} style={[styles.toggle, autoSave && styles.toggleOn]}>
               <View style={[styles.knob, autoSave && styles.knobOn]} />
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
       </LinearGradient>
 
-      {/* Quick stats */}
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, { backgroundColor: cardBg }]}>
-          <Ionicons name="school-outline" size={18} color={isDark ? '#90CAF9' : '#1976D2'} />
-          <Text style={[styles.statLabel, { color: muted }]}>Department</Text>
-          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{department || '—'}</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: cardBg }]}>
-          <Ionicons name="business-outline" size={18} color={isDark ? '#90CAF9' : '#1976D2'} />
+      <View style={styles.statsGrid}>
+        <View style={[styles.statCard, { backgroundColor: cardBg, borderColor: border }]}>
+          <Ionicons name="business-outline" size={18} color={isDark ? '#93C5FD' : '#2563EB'} />
           <Text style={[styles.statLabel, { color: muted }]}>Faculty</Text>
-          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{faculty || '—'}</Text>
+          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{faculty || 'Not set'}</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: cardBg }]}>
-          <Ionicons name="bar-chart-outline" size={18} color={isDark ? '#90CAF9' : '#1976D2'} />
+        <View style={[styles.statCard, { backgroundColor: cardBg, borderColor: border }]}>
+          <Ionicons name="layers-outline" size={18} color={isDark ? '#93C5FD' : '#2563EB'} />
           <Text style={[styles.statLabel, { color: muted }]}>Level</Text>
-          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{level || '—'}</Text>
+          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{level || 'Not set'}</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: cardBg, borderColor: border }]}>
+          <Ionicons name="globe-outline" size={18} color={isDark ? '#93C5FD' : '#2563EB'} />
+          <Text style={[styles.statLabel, { color: muted }]}>Country</Text>
+          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{country || 'Not set'}</Text>
         </View>
       </View>
 
-      {/* About */}
-      <View style={[styles.card, { backgroundColor: cardBg }]}>
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, { color: textPrimary }]}>About</Text>
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}> 
+        <Text style={[styles.cardTitle, { color: textPrimary }]}>Academic Identity</Text>
+        <Text style={[styles.cardSubtitle, { color: muted }]}>Your official university profile details</Text>
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Full Name</Text>
+          <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={name} onChangeText={setName} editable={editing} placeholder="Full name" placeholderTextColor={muted} />
+          {!!errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
         </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="document-text-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Tell us about yourself"
-              placeholderTextColor={muted}
-              value={bio}
-              onChangeText={setBio}
-              editable={editing}
-              multiline
-            />
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Bio</Text>
+          <TextInput
+            style={[styles.input, styles.textArea, { color: textPrimary, borderColor: border }]}
+            value={bio}
+            onChangeText={setBio}
+            editable={editing}
+            placeholder="Brief academic intro"
+            placeholderTextColor={muted}
+            multiline
+          />
+        </View>
+
+        <View style={styles.row2}>
+          <View style={styles.col}>
+            <Text style={[styles.fieldLabel, { color: muted }]}>Department</Text>
+            <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={department} onChangeText={setDepartment} editable={editing} placeholder="Department" placeholderTextColor={muted} />
+          </View>
+          <View style={styles.col}>
+            <Text style={[styles.fieldLabel, { color: muted }]}>Faculty</Text>
+            <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={faculty} onChangeText={setFaculty} editable={editing} placeholder="Faculty" placeholderTextColor={muted} />
           </View>
         </View>
-      </View>
 
-      {/* Academic Info */}
-      <View style={[styles.card, { backgroundColor: cardBg }]}>
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, { color: textPrimary }]}>Academic Info</Text>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="school-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            {editing ? (
-              <View style={styles.chipsRow}>
-                {levels.map((lv) => (
-                  <TouchableOpacity key={lv} onPress={() => setLevel(lv)} style={[styles.chip, level === lv && styles.chipActive]}>
-                    <Text style={[styles.chipText, level === lv && styles.chipTextActive]}>{lv}</Text>
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Level</Text>
+          {editing ? (
+            <View style={styles.chipsRow}>
+              {levels.map((lv) => {
+                const active = level === lv;
+                return (
+                  <TouchableOpacity key={lv} onPress={() => setLevel(lv)} style={[styles.chip, active && styles.chipActive]}>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{lv}</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <Text style={[styles.inputStatic, { color: level ? textPrimary : muted }]}>{level || 'Level (e.g., 100, 200)'}</Text>
-            )}
-            {!!errors.level && <Text style={styles.errorText}>{errors.level}</Text>}
-          </View>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="albums-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Department"
-              placeholderTextColor={muted}
-              value={department}
-              onChangeText={setDepartment}
-              editable={editing}
-            />
-          </View>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="business-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Faculty"
-              placeholderTextColor={muted}
-              value={faculty}
-              onChangeText={setFaculty}
-              editable={editing}
-            />
-          </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={[styles.input, { borderColor: border, justifyContent: 'center' }]}>
+              <Text style={{ color: level ? textPrimary : muted }}>{level || 'Not set'}</Text>
+            </View>
+          )}
+          {!!errors.level && <Text style={styles.errorText}>{errors.level}</Text>}
         </View>
       </View>
 
-      {/* Contact */}
-      <View style={[styles.card, { backgroundColor: cardBg }]}>
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, { color: textPrimary }]}>Contact</Text>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="call-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Phone"
-              placeholderTextColor={muted}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              editable={editing}
-            />
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}> 
+        <Text style={[styles.cardTitle, { color: textPrimary }]}>Contact and Personal</Text>
+        <Text style={[styles.cardSubtitle, { color: muted }]}>Used for campus communication and identification</Text>
+
+        <View style={styles.row2}>
+          <View style={styles.col}>
+            <Text style={[styles.fieldLabel, { color: muted }]}>Phone</Text>
+            <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={phone} onChangeText={setPhone} editable={editing} placeholder="Phone" placeholderTextColor={muted} keyboardType="phone-pad" />
             {!!errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
           </View>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="mail-outline" size={18} color={muted} />
-          <Text style={[styles.inputStatic, { color: muted }]} numberOfLines={1}>{profile?.email}</Text>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="location-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Address"
-              placeholderTextColor={muted}
-              value={address}
-              onChangeText={setAddress}
-              editable={editing}
-            />
-          </View>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="flag-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Country"
-              placeholderTextColor={muted}
-              value={country}
-              onChangeText={setCountry}
-              editable={editing}
-            />
-          </View>
-        </View>
-      </View>
-
-      {/* Personal */}
-      <View style={[styles.card, { backgroundColor: cardBg }]}>
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, { color: textPrimary }]}>Personal</Text>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="transgender-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            {editing ? (
-              <View style={styles.chipsRow}>
-                {genders.map((g) => (
-                  <TouchableOpacity key={g} onPress={() => setGender(g)} style={[styles.chip, gender === g && styles.chipActive]}>
-                    <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>{g}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <Text style={[styles.inputStatic, { color: gender ? textPrimary : muted }]}>{gender || 'Gender'}</Text>
-            )}
-            {!!errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
-          </View>
-        </View>
-        <View style={styles.fieldRow}>
-          <Ionicons name="calendar-outline" size={18} color={muted} />
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { color: textPrimary }]}
-              placeholder="Date of Birth (YYYY-MM-DD)"
-              placeholderTextColor={muted}
-              value={dateOfBirth}
-              onChangeText={setDateOfBirth}
-              editable={editing}
-            />
+          <View style={styles.col}>
+            <Text style={[styles.fieldLabel, { color: muted }]}>Date of Birth</Text>
+            <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={dateOfBirth} onChangeText={setDateOfBirth} editable={editing} placeholder="YYYY-MM-DD" placeholderTextColor={muted} />
             {!!errors.dateOfBirth && <Text style={styles.errorText}>{errors.dateOfBirth}</Text>}
           </View>
         </View>
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Email</Text>
+          <View style={[styles.input, { borderColor: border, justifyContent: 'center', backgroundColor: isDark ? '#0A1B2F' : '#F8FAFC' }]}>
+            <Text style={{ color: muted }}>{profile?.email}</Text>
+          </View>
+        </View>
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Gender</Text>
+          {editing ? (
+            <View style={styles.chipsRow}>
+              {genders.map((g) => {
+                const active = gender === g;
+                return (
+                  <TouchableOpacity key={g} onPress={() => setGender(g)} style={[styles.chip, active && styles.chipActive]}>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{g}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={[styles.input, { borderColor: border, justifyContent: 'center' }]}>
+              <Text style={{ color: gender ? textPrimary : muted }}>{gender || 'Not set'}</Text>
+            </View>
+          )}
+          {!!errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
+        </View>
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Address</Text>
+          <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={address} onChangeText={setAddress} editable={editing} placeholder="Address" placeholderTextColor={muted} />
+        </View>
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Country</Text>
+          <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={country} onChangeText={setCountry} editable={editing} placeholder="Country" placeholderTextColor={muted} />
+        </View>
       </View>
 
-      {/* Actions */}
       <View style={styles.actionsWrap}>
         {editing ? (
           <View style={styles.inlineRow}>
             <TouchableOpacity
-              style={[styles.button, styles.btnOutline, { borderColor: isDark ? '#EF4444' : '#DC2626' }]}
+              style={[styles.button, styles.btnOutline, { borderColor: isDark ? '#F87171' : '#DC2626' }]}
               onPress={() => {
                 setEditing(false);
                 loadProfile();
               }}
               disabled={saving}
             >
-              <Text style={[styles.btnOutlineText, { color: isDark ? '#EF4444' : '#DC2626' }]}>Cancel</Text>
+              <Text style={[styles.btnOutlineText, { color: isDark ? '#F87171' : '#DC2626' }]}>Discard</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.btnPrimary]}
-              onPress={() => handleSave(false)}
-              disabled={saving}
-            >
-              {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>Save Changes</Text>}
+            <TouchableOpacity style={[styles.button, styles.btnPrimary]} onPress={() => handleSave(false)} disabled={saving}>
+              {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>Save Profile</Text>}
             </TouchableOpacity>
           </View>
         ) : (
           <>
             {user?.role === 'power' && (
               <>
-                <TouchableOpacity style={[styles.button, styles.btnSecondary]} onPress={() => router.push('/create-admin')}>
-                  <Ionicons name="person-add-outline" size={18} color={isDark ? '#FFFFFF' : '#1976D2'} />
-                  <Text style={[styles.btnSecondaryText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Create Admin</Text>
+                <TouchableOpacity style={[styles.button, styles.btnSecondary, { borderColor: border }]} onPress={() => router.push('/create-admin')}>
+                  <Ionicons name="person-add-outline" size={18} color={isDark ? '#BFDBFE' : '#1D4ED8'} />
+                  <Text style={[styles.btnSecondaryText, { color: isDark ? '#BFDBFE' : '#1D4ED8' }]}>Create Admin</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.button, styles.btnSecondary]} onPress={() => router.push('/admin-management')}>
-                  <Ionicons name="settings-outline" size={18} color={isDark ? '#FFFFFF' : '#1976D2'} />
-                  <Text style={[styles.btnSecondaryText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Admin Management</Text>
+                <TouchableOpacity style={[styles.button, styles.btnSecondary, { borderColor: border }]} onPress={() => router.push('/admin-management')}>
+                  <Ionicons name="settings-outline" size={18} color={isDark ? '#BFDBFE' : '#1D4ED8'} />
+                  <Text style={[styles.btnSecondaryText, { color: isDark ? '#BFDBFE' : '#1D4ED8' }]}>Admin Management</Text>
                 </TouchableOpacity>
               </>
             )}
-            <TouchableOpacity style={[styles.button, styles.btnSecondary]} onPress={() => router.push('/change-password')}>
-              <Ionicons name="key-outline" size={18} color={isDark ? '#FFFFFF' : '#1976D2'} />
-              <Text style={[styles.btnSecondaryText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Change Password</Text>
+
+            <TouchableOpacity style={[styles.button, styles.btnSecondary, { borderColor: border }]} onPress={() => router.push('/change-password')}>
+              <Ionicons name="key-outline" size={18} color={isDark ? '#BFDBFE' : '#1D4ED8'} />
+              <Text style={[styles.btnSecondaryText, { color: isDark ? '#BFDBFE' : '#1D4ED8' }]}>Change Password</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.button, styles.btnDanger]}
               onPress={async () => {
@@ -460,8 +406,6 @@ export default function ProfileScreen() {
           </>
         )}
       </View>
-
-      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
@@ -469,53 +413,318 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  headerWrap: { paddingTop: 36, paddingBottom: 16 },
-  headerContent: { paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#FFFFFF' },
-  avatarPlaceholder: { backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  avatarInitial: { color: '#FFFFFF', fontSize: 32, fontWeight: '800' },
-  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: '#1976D2', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
-  headerText: { marginLeft: 12, flex: 1 },
-  displayName: { fontSize: 22, fontWeight: '800' },
-  emailText: { marginTop: 2, fontSize: 12 },
-  badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
-  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  badgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  editToggle: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  editToggleText: { color: '#FFFFFF', fontWeight: '700' },
-  autoRow: { marginTop: 12, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  toggle: { width: 50, height: 28, borderRadius: 14, borderWidth: 2, padding: 2, justifyContent: 'center' },
-  toggleOn: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF', transform: [{ translateX: 2 }] },
-  knobOn: { transform: [{ translateX: 22 }] },
 
-  statsRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: -12 },
-  statCard: { flex: 1, marginHorizontal: 4, borderRadius: 14, padding: 12, alignItems: 'flex-start', gap: 4, elevation: 3 },
-  statLabel: { fontSize: 12 },
-  statValue: { fontSize: 14, fontWeight: '700' },
+  heroWrap: {
+    paddingTop: 36,
+    paddingBottom: 18,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+  },
+  heroTopRow: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  avatar: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  avatarPlaceholder: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '800',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#1D4ED8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  heroInfo: {
+    marginLeft: 12,
+    flex: 1,
+    paddingTop: 2,
+  },
+  displayName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  emailText: {
+    marginTop: 3,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  heroBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroBadgeText: {
+    color: '#E6F0FF',
+    fontSize: 11,
+    fontWeight: '700',
+    maxWidth: 130,
+  },
+  editToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  editToggleText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
 
-  card: { marginTop: 12, marginHorizontal: 12, borderRadius: 16, padding: 12, elevation: 2 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  cardTitle: { fontSize: 16, fontWeight: '800' },
-  fieldRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8 },
-  input: { flex: 1, minHeight: 20 },
-  inputStatic: { flex: 1, minHeight: 20 },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(25,118,210,0.35)' },
-  chipActive: { backgroundColor: 'rgba(25,118,210,0.12)', borderColor: '#1976D2' },
-  chipText: { color: '#1976D2', fontWeight: '700', fontSize: 12 },
-  chipTextActive: { color: '#1976D2' },
-  errorText: { color: '#EF4444', fontSize: 12, marginTop: 4 },
+  completionWrap: {
+    marginTop: 14,
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  completionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  completionLabel: {
+    color: '#E6F0FF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  completionPercent: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  completionTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    overflow: 'hidden',
+  },
+  completionFill: {
+    height: '100%',
+    backgroundColor: '#E6F0FF',
+    borderRadius: 999,
+  },
 
-  actionsWrap: { paddingHorizontal: 12, marginTop: 16, gap: 8 },
-  inlineRow: { flexDirection: 'row', gap: 8 },
-  button: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
-  btnPrimary: { backgroundColor: '#1976D2', flex: 1 },
-  btnPrimaryText: { color: '#FFFFFF', fontWeight: '800' },
-  btnOutline: { borderWidth: 2, backgroundColor: 'transparent', flex: 1 },
-  btnOutlineText: { fontWeight: '800' },
-  btnSecondary: { backgroundColor: 'transparent', borderWidth: 2, borderColor: 'rgba(25,118,210,0.25)' },
-  btnSecondaryText: { fontWeight: '800' },
-  btnDanger: { backgroundColor: '#EF4444' },
-  btnDangerText: { color: '#FFFFFF', fontWeight: '800' },
+  autoRow: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  autoRowLabel: {
+    color: '#E6F0FF',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  toggle: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleOn: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  knob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    transform: [{ translateX: 1 }],
+  },
+  knobOn: {
+    transform: [{ translateX: 24 }],
+  },
+
+  statsGrid: {
+    flexDirection: 'row',
+    marginTop: -12,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  statValue: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  card: {
+    marginTop: 12,
+    marginHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    marginTop: 3,
+    marginBottom: 12,
+  },
+
+  row2: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  col: {
+    flex: 1,
+  },
+  fieldBlock: {
+    marginBottom: 12,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  input: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  textArea: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+    paddingTop: 10,
+  },
+
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.3)',
+    backgroundColor: 'transparent',
+  },
+  chipActive: {
+    backgroundColor: 'rgba(37,99,235,0.15)',
+    borderColor: '#2563EB',
+  },
+  chipText: {
+    color: '#2563EB',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  chipTextActive: {
+    color: '#1D4ED8',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginTop: 5,
+  },
+
+  actionsWrap: {
+    marginTop: 14,
+    paddingHorizontal: 12,
+    gap: 9,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  button: {
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  btnPrimary: {
+    flex: 1,
+    backgroundColor: '#1D4ED8',
+  },
+  btnPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  btnOutline: {
+    flex: 1,
+    borderWidth: 1.8,
+    backgroundColor: 'transparent',
+  },
+  btnOutlineText: {
+    fontWeight: '800',
+  },
+  btnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.2,
+  },
+  btnSecondaryText: {
+    fontWeight: '800',
+  },
+  btnDanger: {
+    backgroundColor: '#DC2626',
+  },
+  btnDangerText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
 });

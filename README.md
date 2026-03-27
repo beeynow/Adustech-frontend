@@ -1,51 +1,59 @@
-# Welcome to your Expo app 👋
+# Adustech Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Production-focused Expo + React Native application for Adustech.
 
-## Get started
+## Stack
+- Expo Router (file-based routing)
+- React Native + TypeScript (strict mode)
+- Axios service layer
+- AsyncStorage-backed auth state with backend session revalidation
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+## Quick Start
+1. Install dependencies:
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Set runtime API endpoint:
+```bash
+export EXPO_PUBLIC_API_BASE_URL="https://adustech-backend.vercel.app"
+```
 
-## Learn more
+3. Start app:
+```bash
+npx expo start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Environment Configuration
+The API client reads base URL from:
+1. `EXPO_PUBLIC_API_BASE_URL`
+2. `expo.extra.apiBaseUrl` (if provided)
+3. Fallback defaults (`https` in production)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+API base is normalized and `/api` is appended automatically in `services/config.ts`.
 
-## Join the community
+## Architecture
+- `app/`: route screens and navigation layout
+- `context/AuthContext.tsx`: auth lifecycle, storage policy, session refresh
+- `services/`: API layer modules
+- `utils/permissions.ts`: centralized RBAC helpers
 
-Join our community of developers creating universal apps.
+## Security and Reliability Defaults
+- HTTPS-first API resolution in production
+- Centralized API error normalization via `ApiError`
+- Cookie/session requests use `withCredentials: true`
+- Startup auth state is revalidated with `/auth/me`
+- Stale local auth state is automatically cleared
+- Android permissions reduced to minimum required set
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-# Adustech-frontend
+## Core Production Checklist
+- Set production API URL via `EXPO_PUBLIC_API_BASE_URL`
+- Verify backend CORS + secure cookie policy for mobile/web
+- Run lint and typecheck in CI (`npm run lint`, `npx tsc --noEmit`)
+- Build with EAS production profile
+
+## Build
+Use your existing build guides in:
+- `BUILD_INSTRUCTIONS.md`
+- `README_BUILD.md`
+- `PRODUCTION_CHECKLIST.md`

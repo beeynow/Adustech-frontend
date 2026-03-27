@@ -6,7 +6,7 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,14 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   TextInput
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '@/context/AuthContext';
 import integratedChannelsApi from '@/services/integratedChannelsApi';
+import { showToast } from '../../utils/toast';
 
 export default function ChannelsPage() {
-  const { user } = useContext(AuthContext);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [myChannels, setMyChannels] = useState<any[]>([]);
@@ -41,9 +39,8 @@ export default function ChannelsPage() {
     try {
       // Auto-join channels based on user profile
       await integratedChannelsApi.autoJoinChannels();
-      console.log('✅ Auto-joined channels');
-    } catch (error) {
-      console.error('Error auto-joining channels:', error);
+    } catch {
+      showToast.info('Some suggested channels could not be auto-joined yet.');
     }
   };
 
@@ -59,9 +56,8 @@ export default function ChannelsPage() {
       setMyChannels(myChannelsData.channels || []);
       setRecommended(recommendedData.recommended || []);
 
-    } catch (error) {
-      console.error('Error loading channels:', error);
-      Alert.alert('Error', 'Failed to load channels');
+    } catch {
+      showToast.error('Failed to load channels.');
     } finally {
       setLoading(false);
     }
@@ -76,11 +72,10 @@ export default function ChannelsPage() {
   const handleJoinChannel = async (channelId: string) => {
     try {
       await integratedChannelsApi.joinChannel(channelId);
-      Alert.alert('Success', 'Joined channel successfully');
+      showToast.success('Joined channel successfully.');
       await loadChannels();
     } catch (error: any) {
-      console.error('Error joining channel:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to join channel');
+      showToast.error(error.response?.data?.message || 'Failed to join channel');
     }
   };
 
@@ -104,10 +99,29 @@ export default function ChannelsPage() {
     }
   };
 
+  const openChannel = (channel: any) => {
+    if (channel.scope === 'faculty' && channel.facultyId) {
+      router.push(`/faculty-channel/${channel.facultyId}`);
+      return;
+    }
+
+    if (channel.scope === 'department' && channel.departmentId) {
+      router.push(`/department/${channel.departmentId}`);
+      return;
+    }
+
+    if (channel.scope === 'level' && channel.levelId) {
+      router.push(`/level-channel/${channel.levelId}`);
+      return;
+    }
+
+    router.push(`/channel/${channel.id}`);
+  };
+
   const renderMyChannel = ({ item }: { item: any }) => (
     <TouchableOpacity
       style={styles.channelCard}
-      onPress={() => router.push(`/channel/${item.id}`)}
+      onPress={() => openChannel(item)}
     >
       <View style={[styles.scopeIcon, { backgroundColor: getScopeColor(item.scope) }]}>
         <Ionicons name={getScopeIcon(item.scope)} size={24} color="#fff" />
