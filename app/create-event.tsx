@@ -9,6 +9,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Image } from 'expo-image';
 import { useAuth } from '../context/AuthContext';
 import { eventsAPI, type EventAudience, type EventCategory, type EventFormat } from '../services/eventsApi';
+import { postsAPI } from '../services/postsApi';
 import { showToast } from '../utils/toast';
 import { EVENT_AUDIENCE_OPTIONS, EVENT_CATEGORY_OPTIONS, EVENT_FORMAT_OPTIONS, formatEventCurrency, formatEventDateTime } from '../utils/events';
 import { isValidEmail, normalizeEmail } from '../utils/validation';
@@ -24,6 +25,33 @@ const priceStringToCents = (value: string) => {
   return Math.round(numeric * 100);
 };
 
+const buildEventRoomPostText = (event: {
+  title: string;
+  summary: string;
+  details: string;
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  streamUrl: string;
+  isFree: boolean;
+  ticketPriceCents: number;
+  currency: string;
+  ticketInstructions: string;
+}) => {
+  const sections = [
+    event.title.trim(),
+    event.summary.trim(),
+    event.details.trim(),
+    `When: ${formatEventDateTime(event.startsAt)} - ${formatEventDateTime(event.endsAt)}`,
+    event.location.trim() ? `Where: ${event.location.trim()}` : '',
+    event.streamUrl.trim() ? `Link: ${event.streamUrl.trim()}` : '',
+    `Access: ${event.isFree ? 'Free entry' : formatEventCurrency(event.ticketPriceCents, event.currency)}`,
+    event.ticketInstructions.trim() ? `Tickets: ${event.ticketInstructions.trim()}` : '',
+  ];
+
+  return sections.filter(Boolean).join('\n\n').slice(0, 1000);
+};
+
 const SelectionRow = ({
   options,
   value,
@@ -32,7 +60,7 @@ const SelectionRow = ({
   text,
   border,
 }: {
-  options: Array<{ label: string; value: string }>;
+  options: { label: string; value: string }[];
   value: string;
   onChange: (next: string) => void;
   accent: string;
@@ -284,8 +312,20 @@ export default function CreateEventScreen() {
         timezone: 'Africa/Lagos',
       });
 
-      showToast.success('Event published successfully.');
-      router.replace(`/event/${response.event.id}`);
+      try {
+        await postsAPI.create({
+          text: buildEventRoomPostText(response.event),
+          imageBase64,
+          category: 'Event',
+        });
+
+        showToast.success('Event published and added to the events room.');
+      } catch (postError: any) {
+        console.warn('Event room post sync failed:', postError);
+        showToast.info('Event saved, but the events room post could not be published automatically.');
+      }
+
+      router.replace('/events');
     } catch (error: any) {
       showToast.error(error?.message || error?.response?.data?.message || 'Unable to create the event right now.');
     } finally {

@@ -11,23 +11,14 @@ import {
   Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import type { AppNotification } from '../services/notificationsApi';
 
 const { width } = Dimensions.get('window');
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  timestamp: Date;
-  read: boolean;
-  type: 'info' | 'success' | 'warning' | 'error';
-  icon?: string;
-}
 
 interface NotificationModalProps {
   visible: boolean;
   onClose: () => void;
-  notifications?: Notification[];
+  notifications?: AppNotification[];
   onMarkAsRead?: (id: string) => void;
   onMarkAllAsRead?: () => void;
   onClearAll?: () => void;
@@ -59,7 +50,7 @@ export default function NotificationModal({
         useNativeDriver: true,
       }).start();
     }
-  }, [visible]);
+  }, [slideAnim, visible]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -82,7 +73,12 @@ export default function NotificationModal({
     }
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return 'Just now';
+    }
+
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);
@@ -96,6 +92,24 @@ export default function NotificationModal({
     return date.toLocaleDateString();
   };
 
+  const getNotificationTitle = (notification: AppNotification) => {
+    const title = notification.title.trim();
+    return title || 'New notification';
+  };
+
+  const getNotificationMessage = (notification: AppNotification) => {
+    const message = notification.message.trim();
+    if (message) {
+      return message;
+    }
+
+    if (notification.entityType === 'post') {
+      return `${notification.actor?.name || 'Someone'} shared a new post.`;
+    }
+
+    return 'You have a new notification.';
+  };
+
   return (
     <Modal
       visible={visible}
@@ -103,11 +117,12 @@ export default function NotificationModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <TouchableOpacity 
-        style={styles.overlay} 
-        activeOpacity={1} 
-        onPress={onClose}
-      >
+      <View style={styles.overlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={onClose}
+        />
         <Animated.View
           style={[
             styles.modalContainer,
@@ -163,6 +178,10 @@ export default function NotificationModal({
           {/* Notifications List */}
           <ScrollView 
             style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              notifications.length === 0 && styles.scrollContentEmpty,
+            ]}
             showsVerticalScrollIndicator={false}
           >
             {notifications.length === 0 ? (
@@ -176,7 +195,7 @@ export default function NotificationModal({
                   No notifications
                 </Text>
                 <Text style={[styles.emptySubtitle, { color: isDark ? '#546E7A' : '#B0BEC5' }]}>
-                  You're all caught up!
+                  You&apos;re all caught up!
                 </Text>
               </View>
             ) : (
@@ -216,7 +235,7 @@ export default function NotificationModal({
                         ]}
                         numberOfLines={1}
                       >
-                        {notification.title}
+                        {getNotificationTitle(notification)}
                       </Text>
                       {!notification.read && (
                         <View style={styles.unreadDot} />
@@ -226,7 +245,7 @@ export default function NotificationModal({
                       style={[styles.notificationMessage, { color: isDark ? '#90CAF9' : '#546E7A' }]}
                       numberOfLines={2}
                     >
-                      {notification.message}
+                      {getNotificationMessage(notification)}
                     </Text>
                     <Text style={[styles.notificationTime, { color: isDark ? '#546E7A' : '#B0BEC5' }]}>
                       {formatTime(notification.timestamp)}
@@ -237,7 +256,7 @@ export default function NotificationModal({
             )}
           </ScrollView>
         </Animated.View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 }
@@ -252,6 +271,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: Math.min(width * 0.9, 400),
     maxHeight: '90%',
+    minHeight: 220,
     marginTop: 60,
     marginRight: 10,
     borderRadius: 16,
@@ -312,7 +332,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   scrollView: {
-    flex: 1,
+    maxHeight: 460,
+  },
+  scrollContent: {
+    paddingBottom: 8,
+  },
+  scrollContentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   emptyContainer: {
     alignItems: 'center',

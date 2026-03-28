@@ -1,620 +1,832 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  FlatList,
+  Platform,
+  ScrollView,
+  Share,
+  StatusBar,
   StyleSheet,
-  useColorScheme,
+  Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  Image,
-  ScrollView,
-  Platform,
-  StatusBar,
-  Share,
+  View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { postsAPI } from '../../services/postsApi';
-import { useAuth } from '../../context/AuthContext';
-import { canPostToHome, getPermissionErrorMessage, getRoleBadgeColor, getRoleDisplayName } from '../../utils/permissions';
-import NotificationModal from '../../components/NotificationModal';
-import type { UserRole } from '../../utils/permissions';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import type { PostComment, PostItem } from '../../services/postsApi';
+import { postsAPI } from '../../services/postsApi';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
+import NotificationModal from '../../components/NotificationModal';
+import { getRoleBadgeColor } from '../../utils/permissions';
+import type { UserRole } from '../../utils/permissions';
 import { showToast } from '../../utils/toast';
+import { useAppTheme } from '../../utils/theme';
+import { PostCard } from '../../components/posts/PostCard';
+import { PostCommentCard } from '../../components/posts/PostCommentCard';
 
-interface Post {
-  id: string;
-  author: string;
-  avatar?: string;
-  category: string;
-  title: string;
-  content: string;
-  image?: string;
-  likes: number;
-  reposts: number;
-  comments: number;
-  liked?: boolean;
-  reposted?: boolean;
-  createdAt?: string;
-}
+const CATEGORIES = ['All', 'Level', 'Department', 'Exam', 'Timetable', 'Event'] as const;
 
-const CATEGORIES = ['All', 'Level', 'Department', 'Exam', 'Timetable', 'Event'];
-
-const formatTimeAgo = (value?: string) => {
-  if (!value) return 'now';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'now';
-
-  const diff = Math.max(0, Date.now() - date.getTime());
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-  const weeks = Math.floor(days / 7);
-  return `${weeks}w`;
+const mergePosts = (currentPosts: PostItem[], incomingPosts: PostItem[]) => {
+  const currentIds = new Set(currentPosts.map((post) => post.id));
+  const nextPosts = incomingPosts.filter((post) => !currentIds.has(post.id));
+  return [...currentPosts, ...nextPosts];
 };
 
 export default function HomeScreen() {
-  const isDark = useColorScheme() === 'dark';
   const router = useRouter();
+  const theme = useAppTheme();
   const { user } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    markAllAsRead,
+    markNotificationAsRead,
+    clearAll,
+    refreshNotifications,
+  } = useNotifications();
+
   const [search, setSearch] = useState('');
-  const [activeCat, setActiveCat] = useState('All');
+  const [activeCat, setActiveCat] = useState<(typeof CATEGORIES)[number]>('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
   const [page, setPage] = useState(1);
-  const [posts, setPosts] = useState<Post[]>([] as any);
+  const [hasMore, setHasMore] = useState(true);
+  const [posts, setPosts] = useState<PostItem[]>([]);
   const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const [commentsVisible, setCommentsVisible] = useState(false);
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [sheetComments, setSheetComments] = useState<PostComment[]>([]);
+  const [sheetText, setSheetText] = useState('');
 
-  const [notifications] = useState([
-    { id: '1', title: 'New Comment', message: 'Someone commented on your post', timestamp: new Date(Date.now() - 300000), read: false, type: 'info' as const },
-    { id: '2', title: 'Post Liked', message: 'Your post received 10 likes', timestamp: new Date(Date.now() - 3600000), read: false, type: 'success' as const },
-    { id: '3', title: 'New Event', message: 'Check out the upcoming campus event', timestamp: new Date(Date.now() - 86400000), read: true, type: 'info' as const },
-  ]);
+  const loadPosts = useCallback(async ({
+    pageToLoad = 1,
+    append = false,
+    showRefresh = false,
+  }: {
+    pageToLoad?: number;
+    append?: boolean;
+    showRefresh?: boolean;
+  } = {}) => {
+    if (append) {
+      setLoadingMore(true);
+    }
 
-  const loadPosts = useCallback(async (showLoading = false) => {
-    if (showLoading) setRefreshing(true);
+    if (showRefresh) {
+      setRefreshing(true);
+    }
+
     try {
       const data = await postsAPI.list({
-        page: 1,
+        page: pageToLoad,
         limit: 10,
         category: activeCat !== 'All' ? activeCat : undefined,
         q: search || undefined,
       });
-      const mapped = (data.posts || []).map((p: any) => ({
-        id: p.id || p._id,
-        author: p.userName,
-        category: p.category || 'All',
-        title: p.text?.slice(0, 40) || 'Post',
-        content: p.text || '',
-        image: p.imageUrl || p.imageBase64 || undefined,
-        likes: (p.likes || []).length,
-        reposts: (p.reposts || []).length || 0,
-        comments: (p.comments || []).length,
-        liked: false,
-        reposted: false,
-        createdAt: p.createdAt,
-      }));
-      setPosts(mapped);
-      setPage(1);
-    } catch (e) {
-      showToast.error('Unable to refresh posts right now.');
+
+      setPosts((currentPosts) => (
+        append ? mergePosts(currentPosts, data.posts) : data.posts
+      ));
+      setPage(pageToLoad);
+      setHasMore(Boolean(data.pagination.hasMore));
+    } catch {
+      showToast.error(append ? 'Unable to load more posts.' : 'Unable to refresh posts right now.');
     } finally {
-      if (showLoading) setRefreshing(false);
+      if (append) {
+        setLoadingMore(false);
+      }
+
+      if (showRefresh) {
+        setRefreshing(false);
+      }
     }
   }, [activeCat, search]);
 
   useEffect(() => {
-    loadPosts();
+    void loadPosts({ pageToLoad: 1 });
   }, [loadPosts]);
 
   useFocusEffect(
     useCallback(() => {
-      loadPosts();
-    }, [loadPosts])
+      void loadPosts({ pageToLoad: 1 });
+      void refreshNotifications();
+    }, [loadPosts, refreshNotifications])
   );
 
-  const filtered = useMemo(() => {
-    let list = posts;
-    if (activeCat !== 'All') list = list.filter((p) => p.category === activeCat);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.content.toLowerCase().includes(q) ||
-          p.author.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [posts, activeCat, search]);
+  const updatePost = useCallback((postId: string, updater: (post: PostItem) => PostItem) => {
+    setPosts((currentPosts) => currentPosts.map((post) => (
+      post.id === postId ? updater(post) : post
+    )));
+  }, []);
 
-  const toggleLike = async (id: string) => {
-    setPosts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p))
-    );
+  const handleToggleLike = async (postId: string) => {
+    const previousPost = posts.find((post) => post.id === postId);
+    if (!previousPost) {
+      return;
+    }
+
+    updatePost(postId, (post) => ({
+      ...post,
+      isLiked: !post.isLiked,
+      likesCount: Math.max(0, post.likesCount + (post.isLiked ? -1 : 1)),
+    }));
+
     try {
-      await postsAPI.toggleLike(id);
+      const response = await postsAPI.toggleLike(postId);
+      updatePost(postId, (post) => ({
+        ...post,
+        isLiked: response.liked,
+        likesCount: response.likesCount,
+      }));
     } catch {
-      setPosts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p))
-      );
+      updatePost(postId, () => previousPost);
       showToast.error('Unable to update likes right now.');
     }
   };
 
-  const toggleRepost = async (id: string) => {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, reposts: p.reposted ? p.reposts - 1 : p.reposts + 1, reposted: !p.reposted }
-          : p
-      )
-    );
+  const handleSharePost = async (post: PostItem) => {
     try {
-      await postsAPI.toggleRepost(id);
+      await Share.share({
+        message: `${post.author.name}: ${post.text || post.title}`,
+      });
     } catch {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === id
-            ? { ...p, reposts: p.reposted ? p.reposts - 1 : p.reposts + 1, reposted: !p.reposted }
-            : p
-        )
-      );
-      showToast.error('Unable to repost this post right now.');
+      showToast.error('Unable to share this post right now.');
     }
   };
 
-  const handleSharePost = async (item: Post) => {
-    try {
-      await Share.share({
-        message: `${item.author}: ${item.content || item.title}`,
-      });
-    } catch {}
-  };
-
-  const headerBg = isDark ? '#0A1929' : '#FFFFFF';
-  const bg = isDark ? '#0A1929' : '#FFFFFF';
-  const card = isDark ? '#0A1929' : '#FFFFFF';
-  const textPrimary = isDark ? '#F3F7FF' : '#0F172A';
-  const muted = isDark ? '#8AA4C8' : '#64748B';
-  const border = isDark ? '#1D334F' : '#E2E8F0';
-
-  const goToDetail = (item: Post) => {
+  const goToDetail = (post: PostItem) => {
     router.push({
       pathname: '/post/[id]',
       params: {
-        id: item.id,
-        title: item.title,
-        author: item.author,
-        content: item.content,
-        image: item.image || '',
+        id: post.id,
       },
     });
   };
 
-  const [commentsVisible, setCommentsVisible] = useState(false);
-  const [activePostId, setActivePostId] = useState<string | null>(null);
-  const [sheetComments, setSheetComments] = useState<Array<{ id: string; author: string; text: string; likes?: number }>>([]);
-  const [sheetText, setSheetText] = useState('');
-
   const openComments = async (postId: string) => {
     setActivePostId(postId);
     setCommentsVisible(true);
+    setLoadingComments(true);
+
     try {
-      const data = await postsAPI.listComments(postId);
-      const mapped = (data.comments || []).map((c: any) => ({
-        id: c._id,
-        author: c.userName,
-        text: c.text,
-        likes: (c.likes || []).length,
-      }));
-      setSheetComments(mapped);
+      const response = await postsAPI.listComments(postId);
+      setSheetComments(response.comments);
     } catch {
       setSheetComments([]);
+      showToast.error('Unable to load comments right now.');
+    } finally {
+      setLoadingComments(false);
     }
   };
 
   const addSheetComment = async () => {
-    if (!sheetText.trim() || !activePostId) return;
-    try {
-      const res = await postsAPI.addComment(activePostId, sheetText);
-      const c = res.comment;
-      setSheetComments((prev) => [...prev, { id: c._id, author: c.userName, text: c.text, likes: 0 }]);
-      setSheetText('');
-      setPosts((prev) => prev.map((p) => (p.id === activePostId ? { ...p, comments: p.comments + 1 } : p)));
-    } catch {}
-  };
-
-  const handleCreatePost = () => {
-    const userRole = user?.role as UserRole | undefined;
-
-    if (!canPostToHome(userRole)) {
-      showToast.warning(getPermissionErrorMessage('post-home', userRole), `Role: ${getRoleDisplayName(userRole)}`);
+    if (!sheetText.trim() || !activePostId || submittingComment) {
       return;
     }
 
-    router.push('/upload' as any);
+    try {
+      setSubmittingComment(true);
+      const response = await postsAPI.addComment(activePostId, sheetText.trim());
+      setSheetComments((currentComments) => [response.comment, ...currentComments]);
+      updatePost(activePostId, (post) => ({
+        ...post,
+        commentsCount: response.commentsCount || post.commentsCount + 1,
+      }));
+      setSheetText('');
+    } catch (error: any) {
+      showToast.error(error?.message || 'Unable to add your comment.');
+    } finally {
+      setSubmittingComment(false);
+    }
   };
 
-  const unreadNotifications = notifications.filter((n) => !n.read).length;
+  const toggleSheetCommentLike = async (commentId: string) => {
+    if (!activePostId) {
+      return;
+    }
 
-  const renderAction = (icon: keyof typeof Ionicons.glyphMap, count: number | string, color: string, onPress: () => void) => (
-    <TouchableOpacity style={styles.actionBtn} onPress={onPress} activeOpacity={0.7}>
-      <Ionicons name={icon} size={18} color={color} />
-      <Text style={[styles.actionCount, { color }]}>{count}</Text>
-    </TouchableOpacity>
+    const previousComments = sheetComments;
+
+    setSheetComments((currentComments) => currentComments.map((comment) => (
+      comment.id === commentId
+        ? {
+            ...comment,
+            isLiked: !comment.isLiked,
+            likesCount: Math.max(0, comment.likesCount + (comment.isLiked ? -1 : 1)),
+          }
+        : comment
+    )));
+
+    try {
+      const response = await postsAPI.toggleLikeComment(activePostId, commentId);
+      setSheetComments((currentComments) => currentComments.map((comment) => (
+        comment.id === commentId
+          ? {
+              ...comment,
+              isLiked: response.liked,
+              likesCount: response.likesCount,
+            }
+          : comment
+      )));
+    } catch {
+      setSheetComments(previousComments);
+      showToast.error('Unable to react to this comment.');
+    }
+  };
+
+  const handleEndReached = useCallback(() => {
+    if (loadingMore || refreshing || !hasMore) {
+      return;
+    }
+
+    void loadPosts({
+      pageToLoad: page + 1,
+      append: true,
+    });
+  }, [hasMore, loadPosts, loadingMore, page, refreshing]);
+
+  const activePost = useMemo(
+    () => posts.find((post) => post.id === activePostId) || null,
+    [activePostId, posts]
   );
 
-  const renderItem = ({ item }: { item: Post }) => {
-    const likeColor = item.liked ? '#E11D48' : muted;
-    const repostColor = item.reposted ? '#16A34A' : muted;
-
-    return (
-      <View style={[styles.post, { backgroundColor: card, borderBottomColor: border }]}> 
-        <View style={styles.postRow}>
-          <View style={[styles.avatar, { backgroundColor: isDark ? '#1E40AF' : '#2563EB' }]}> 
-            <Text style={styles.avatarText}>{item.author.charAt(0).toUpperCase()}</Text>
-          </View>
-
-          <View style={styles.postMain}>
-            <TouchableOpacity activeOpacity={0.8} onPress={() => goToDetail(item)}>
-              <View style={styles.metaRow}>
-                <Text style={[styles.displayName, { color: textPrimary }]} numberOfLines={1}>{item.author}</Text>
-                <Text style={[styles.handle, { color: muted }]} numberOfLines={1}>@{item.author.toLowerCase().replace(/\s+/g, '')}</Text>
-                <Text style={[styles.dot, { color: muted }]}>•</Text>
-                <Text style={[styles.time, { color: muted }]}>{formatTimeAgo(item.createdAt)}</Text>
-                <View style={[styles.categoryPill, { borderColor: border }]}> 
-                  <Text style={[styles.categoryText, { color: muted }]}>{item.category}</Text>
-                </View>
-              </View>
-
-              <Text style={[styles.postText, { color: textPrimary }]}>{item.content || item.title}</Text>
-
-              {item.image ? <Image source={{ uri: item.image }} style={[styles.postImage, { borderColor: border }]} /> : null}
-            </TouchableOpacity>
-
-            <View style={styles.postActions}>
-              {renderAction('chatbubble-outline', item.comments, muted, () => openComments(item.id))}
-              {renderAction('repeat', item.reposts, repostColor, () => toggleRepost(item.id))}
-              {renderAction(item.liked ? 'heart' : 'heart-outline', item.likes, likeColor, () => toggleLike(item.id))}
-              {renderAction('bar-chart-outline', ' ', muted, () => goToDetail(item))}
-              {renderAction('share-social-outline', ' ', muted, () => handleSharePost(item))}
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
+  const openNotifications = useCallback(() => {
+    void refreshNotifications().finally(() => {
+      setNotificationsVisible(true);
+    });
+  }, [refreshNotifications]);
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}> 
-      <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 12 }} />
-
-      <View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: border }]}> 
-        <Text style={[styles.logo, { color: textPrimary }]}>ADUSTECH</Text>
-        <View style={styles.headerRight}>
-          {user?.role && (user.role === 'power' || user.role === 'admin' || user.role === 'd-admin') && (
-            <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user.role as UserRole) }]}> 
-              <Text style={styles.roleBadgeText}>{user.role === 'power' ? 'PA' : user.role === 'admin' ? 'A' : 'DA'}</Text>
-            </View>
-          )}
-          <TouchableOpacity accessibilityRole="button" style={styles.notificationButton} onPress={() => setNotificationsVisible(true)}>
-            <Ionicons name="notifications-outline" size={22} color={isDark ? '#93C5FD' : '#2563EB'} />
-            {unreadNotifications > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>{unreadNotifications > 9 ? '9+' : unreadNotifications}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <NotificationModal
         visible={notificationsVisible}
         onClose={() => setNotificationsVisible(false)}
         notifications={notifications}
-        onMarkAsRead={() => showToast.info('Notification marked as read.')}
-        onMarkAllAsRead={() => showToast.success('All notifications marked as read.')}
-        onClearAll={() => showToast.success('Notifications cleared.')}
+        onMarkAsRead={(id) => {
+          void markNotificationAsRead(id).catch(() => {
+            showToast.error('Unable to update that notification right now.');
+          });
+        }}
+        onMarkAllAsRead={() => {
+          void markAllAsRead()
+            .then(() => {
+              showToast.success('All notifications marked as read.');
+            })
+            .catch(() => {
+              showToast.error('Unable to mark all notifications as read.');
+            });
+        }}
+        onClearAll={() => {
+          void clearAll()
+            .then(() => {
+              showToast.success('Notifications cleared.');
+            })
+            .catch(() => {
+              showToast.error('Unable to clear notifications right now.');
+            });
+        }}
       />
 
       <FlatList
-        data={filtered}
+        data={posts}
         keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 96 }}
+        renderItem={({ item }) => (
+          <PostCard
+            post={item}
+            onPress={() => goToDetail(item)}
+            onPressComments={() => {
+              void openComments(item.id);
+            }}
+            onPressLike={() => {
+              void handleToggleLike(item.id);
+            }}
+            onPressShare={() => {
+              void handleSharePost(item);
+            }}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.postGap} />}
+        contentContainerStyle={styles.listContent}
         refreshing={refreshing}
-        onRefresh={() => loadPosts(true)}
-        onEndReachedThreshold={0.4}
-        onEndReached={async () => {
-          const nextPage = page + 1;
-          setPage(nextPage);
-          try {
-            const data = await postsAPI.list({
-              page: nextPage,
-              limit: 10,
-              category: activeCat !== 'All' ? activeCat : undefined,
-              q: search || undefined,
-            });
-            const mapped = (data.posts || []).map((p: any) => ({
-              id: p._id,
-              author: p.userName,
-              category: p.category || 'All',
-              title: p.text?.slice(0, 40) || 'Post',
-              content: p.text || '',
-              image: p.imageUrl || p.imageBase64 || undefined,
-              likes: (p.likes || []).length,
-              reposts: (p.reposts || []).length || 0,
-              comments: (p.comments || []).length,
-              liked: false,
-              reposted: false,
-              createdAt: p.createdAt,
-            }));
-            setPosts((prev) => [...prev, ...mapped]);
-          } catch {}
+        onRefresh={() => {
+          void loadPosts({ pageToLoad: 1, showRefresh: true });
         }}
-        stickyHeaderIndices={[0]}
-        ListHeaderComponent={
-          <View style={{ backgroundColor: headerBg }}>
-            <View style={[styles.searchWrap, { backgroundColor: isDark ? '#0F1F33' : '#F8FAFC', borderColor: border }]}> 
-              <Ionicons name="search" color={muted} size={16} />
+        onEndReachedThreshold={0.35}
+        onEndReached={handleEndReached}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={(
+          <View style={styles.headerBlock}>
+            <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 12 }} />
+
+            <View
+              style={[
+                styles.header,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <View style={styles.headerBrand}>
+                <Text style={[styles.logo, { color: theme.text }]}>ADUSTECH</Text>
+                <Text style={[styles.logoSubtitle, { color: theme.textSoft }]}>
+                  Campus pulse in one feed
+                </Text>
+              </View>
+
+              <View style={styles.headerRight}>
+                {user?.role && (user.role === 'power' || user.role === 'admin' || user.role === 'd-admin') ? (
+                  <View
+                    style={[
+                      styles.roleBadge,
+                      {
+                        backgroundColor: getRoleBadgeColor(user.role as UserRole),
+                      },
+                    ]}
+                  >
+                    <Text style={styles.roleBadgeText}>
+                      {user.role === 'power' ? 'PA' : user.role === 'admin' ? 'A' : 'DA'}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={[styles.notificationButton, { backgroundColor: theme.surfaceMuted }]}
+                  onPress={openNotifications}
+                >
+                  <Ionicons name="notifications-outline" size={22} color={theme.accent} />
+                  {unreadCount > 0 ? (
+                    <View style={[styles.notificationBadge, { borderColor: theme.surface }]}>
+                      <Text style={styles.notificationBadgeText}>
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.searchWrap,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                  shadowColor: theme.shadow,
+                },
+              ]}
+            >
+              <Ionicons name="search" color={theme.textSoft} size={20} />
               <TextInput
-                style={[styles.searchInput, { color: textPrimary }]}
+                style={[styles.searchInput, { color: theme.text }]}
                 placeholder="Search posts, people, updates..."
-                placeholderTextColor={muted}
+                placeholderTextColor={theme.textSoft}
                 value={search}
                 onChangeText={setSearch}
               />
-              {search.length > 0 && (
+              {search.length > 0 ? (
                 <TouchableOpacity onPress={() => setSearch('')}>
-                  <Ionicons name="close-circle" size={16} color={muted} />
+                  <Ionicons name="close-circle" size={18} color={theme.textSoft} />
                 </TouchableOpacity>
-              )}
+              ) : null}
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-              {CATEGORIES.map((cat) => {
-                const active = activeCat === cat;
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+            >
+              {CATEGORIES.map((category) => {
+                const isActive = activeCat === category;
                 return (
                   <TouchableOpacity
-                    key={cat}
-                    onPress={() => setActiveCat(cat)}
+                    key={category}
+                    onPress={() => setActiveCat(category)}
                     style={[
                       styles.chip,
-                      { borderColor: active ? (isDark ? '#60A5FA' : '#2563EB') : border, backgroundColor: active ? (isDark ? '#132A45' : '#EAF2FF') : 'transparent' },
+                      {
+                        borderColor: isActive ? theme.accent : theme.border,
+                        backgroundColor: isActive ? theme.accentSoft : theme.surface,
+                      },
                     ]}
                   >
-                    <Text style={[styles.chipText, { color: active ? (isDark ? '#BFDBFE' : '#1D4ED8') : muted }]}>{cat}</Text>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: isActive ? theme.accent : theme.textMuted },
+                      ]}
+                    >
+                      {category}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
           </View>
-        }
+        )}
+        ListFooterComponent={loadingMore ? (
+          <View style={styles.footerLoader}>
+            <ActivityIndicator size="small" color={theme.accent} />
+          </View>
+        ) : (
+          <View style={styles.footerSpacer} />
+        )}
+        ListEmptyComponent={refreshing ? null : (
+          <View
+            style={[
+              styles.emptyState,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+                shadowColor: theme.shadow,
+              },
+            ]}
+          >
+            <View style={[styles.emptyIconWrap, { backgroundColor: theme.accentSoft }]}>
+              <Ionicons name="newspaper-outline" size={22} color={theme.accent} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No posts yet</Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textSoft }]}>
+              Try a different search or category, or check back in a moment.
+            </Text>
+          </View>
+        )}
       />
 
-      <TouchableOpacity style={[styles.fab, { backgroundColor: isDark ? '#2563EB' : '#1D4ED8' }]} onPress={handleCreatePost}>
-        <Ionicons name="add" size={24} color="#fff" />
-      </TouchableOpacity>
+      {commentsVisible ? (
+        <View style={styles.sheetOverlay}>
+          <View
+            style={[
+              styles.sheetWrap,
+              {
+                backgroundColor: theme.surfaceStrong,
+                borderTopColor: theme.border,
+                shadowColor: theme.shadow,
+              },
+            ]}
+          >
+            <View style={[styles.sheetHandle, { backgroundColor: theme.borderStrong }]} />
 
-      {commentsVisible && (
-        <View style={[styles.sheetWrap, { backgroundColor: isDark ? '#0B1C2F' : '#FFFFFF', borderTopColor: border }]}> 
-          <View style={[styles.sheetHeader, { borderBottomColor: border }]}> 
-            <Text style={[styles.sheetTitle, { color: textPrimary }]}>Comments</Text>
-            <TouchableOpacity onPress={() => setCommentsVisible(false)}>
-              <Ionicons name="close" size={22} color={isDark ? '#93C5FD' : '#2563EB'} />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={sheetComments}
-            keyExtractor={(i) => i.id}
-            renderItem={({ item }) => (
-              <View style={[styles.sheetComment, { borderBottomColor: border }]}> 
-                <View style={[styles.avatar, { width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? '#1E40AF' : '#2563EB' }]}>
-                  <Text style={styles.avatarText}>{item.author.charAt(0).toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.sheetAuthor, { color: textPrimary }]}>{item.author}</Text>
-                  <Text style={[styles.sheetText, { color: muted }]}>{item.text}</Text>
-                </View>
-                <Text style={[styles.sheetLikes, { color: muted }]}>{item.likes || 0}</Text>
+            <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
+              <View style={styles.sheetHeaderText}>
+                <Text style={[styles.sheetTitle, { color: theme.text }]}>Comments</Text>
+                <Text style={[styles.sheetSubtitle, { color: theme.textSoft }]}>
+                  {activePost ? `${activePost.commentsCount} saved replies` : 'Join the conversation'}
+                </Text>
               </View>
-            )}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 64 }}
-          />
 
-          <View style={[styles.sheetComposer, { borderTopColor: border }]}> 
-            <TextInput
-              value={sheetText}
-              onChangeText={setSheetText}
-              placeholder="Add a comment..."
-              placeholderTextColor={muted}
-              style={[styles.sheetInput, { color: textPrimary }]}
-            />
-            <TouchableOpacity onPress={addSheetComment}>
-              <Ionicons name="send" size={18} color={isDark ? '#93C5FD' : '#2563EB'} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sheetClose, { backgroundColor: theme.surfaceMuted }]}
+                onPress={() => setCommentsVisible(false)}
+              >
+                <Ionicons name="close" size={18} color={theme.textSoft} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingComments ? (
+              <View style={styles.sheetLoader}>
+                <ActivityIndicator size="small" color={theme.accent} />
+              </View>
+            ) : (
+              <FlatList
+                data={sheetComments}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <View style={styles.sheetCommentWrap}>
+                    <PostCommentCard
+                      comment={item}
+                      onPressLike={() => {
+                        void toggleSheetCommentLike(item.id);
+                      }}
+                    />
+                  </View>
+                )}
+                contentContainerStyle={styles.sheetListContent}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={(
+                  <View style={styles.sheetEmptyState}>
+                    <Text style={[styles.sheetEmptyTitle, { color: theme.text }]}>
+                      No comments yet
+                    </Text>
+                    <Text style={[styles.sheetEmptySubtitle, { color: theme.textSoft }]}>
+                      Start the thread and your reply will be saved to this post.
+                    </Text>
+                  </View>
+                )}
+              />
+            )}
+
+            <View style={[styles.sheetComposer, { borderTopColor: theme.border }]}>
+              <View
+                style={[
+                  styles.sheetInputWrap,
+                  {
+                    backgroundColor: theme.input,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <TextInput
+                  value={sheetText}
+                  onChangeText={setSheetText}
+                  placeholder="Add a comment..."
+                  placeholderTextColor={theme.textSoft}
+                  style={[styles.sheetInput, { color: theme.text }]}
+                />
+              </View>
+
+              <TouchableOpacity
+                onPress={addSheetComment}
+                disabled={submittingComment || !sheetText.trim()}
+                style={[
+                  styles.sheetSend,
+                  {
+                    backgroundColor: sheetText.trim() ? theme.accent : theme.surfaceMuted,
+                    opacity: submittingComment ? 0.75 : 1,
+                  },
+                ]}
+              >
+                {submittingComment ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons
+                    name="send-outline"
+                    size={18}
+                    color={sheetText.trim() ? '#FFFFFF' : theme.textSoft}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    height: 56,
+  container: {
+    flex: 1,
+  },
+  listContent: {
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
+    paddingBottom: 116,
+    flexGrow: 1,
+  },
+  headerBlock: {
+    gap: 14,
+    marginBottom: 18,
+  },
+  header: {
+    minHeight: 78,
+    borderWidth: 1,
+    borderRadius: 28,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexDirection: 'row',
+    gap: 16,
   },
-  logo: { fontWeight: '800', fontSize: 18, letterSpacing: 0.5 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerBrand: {
+    flex: 1,
+    gap: 4,
+  },
+  logo: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  logoSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 32,
+    minWidth: 36,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  roleBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  notificationButton: { position: 'relative', padding: 4 },
+  roleBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  notificationButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   notificationBadge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#DC2626',
-    borderRadius: 10,
+    top: -2,
+    right: -2,
     minWidth: 18,
     height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  notificationBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
-  searchWrap: {
-    height: 44,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginHorizontal: 12,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  searchInput: { flex: 1, fontSize: 14 },
-  chipsRow: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 8, paddingHorizontal: 12, paddingRight: 20 },
-  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
-  chipText: { fontSize: 12, fontWeight: '700' },
-
-  post: {
-    borderBottomWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  postRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  avatarText: { color: '#FFFFFF', fontWeight: '800' },
-  postMain: { flex: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5 },
-  displayName: { fontWeight: '800', fontSize: 15 },
-  handle: { fontSize: 13, fontWeight: '500' },
-  dot: { fontSize: 13 },
-  time: { fontSize: 13, marginRight: 4 },
-  categoryPill: {
-    borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  categoryText: { fontSize: 11, fontWeight: '600' },
-  postText: {
-    marginTop: 4,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  postImage: {
-    marginTop: 10,
-    height: 220,
-    borderRadius: 14,
-    width: '100%',
-    borderWidth: 1,
-  },
-  postActions: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: 16,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-  },
-  actionCount: { fontSize: 12, fontWeight: '600', minWidth: 10 },
-
-  fab: {
-    position: 'absolute',
-    right: 18,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    backgroundColor: '#DC2626',
+    borderWidth: 2,
   },
-
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  searchWrap: {
+    height: 58,
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  chipsRow: {
+    gap: 10,
+    paddingRight: 6,
+  },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  postGap: {
+    height: 14,
+  },
+  footerLoader: {
+    paddingVertical: 18,
+  },
+  footerSpacer: {
+    height: 10,
+  },
+  emptyState: {
+    marginTop: 24,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  emptyIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  sheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(5, 15, 26, 0.18)',
+  },
   sheetWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: '30%',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    minHeight: '64%',
+    maxHeight: '84%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderTopWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -8 },
     elevation: 12,
   },
+  sheetHandle: {
+    width: 54,
+    height: 5,
+    borderRadius: 999,
+    alignSelf: 'center',
+    marginTop: 10,
+  },
   sheetHeader: {
-    height: 50,
-    paddingHorizontal: 12,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
+    gap: 16,
   },
-  sheetTitle: { fontWeight: '800', fontSize: 15 },
-  sheetComment: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+  sheetHeaderText: {
+    flex: 1,
+    gap: 3,
   },
-  sheetAuthor: { fontWeight: '700', fontSize: 14 },
-  sheetText: { marginTop: 2, fontSize: 14, lineHeight: 20 },
-  sheetLikes: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  sheetSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sheetClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetLoader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 104,
+  },
+  sheetCommentWrap: {
+    marginBottom: 12,
+  },
+  sheetEmptyState: {
+    paddingTop: 36,
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  sheetEmptySubtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
   sheetComposer: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 56,
     borderTopWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  sheetInput: { flex: 1, height: 40, fontSize: 14 },
+  sheetInputWrap: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  sheetInput: {
+    fontSize: 15,
+    minHeight: 24,
+  },
+  sheetSend: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

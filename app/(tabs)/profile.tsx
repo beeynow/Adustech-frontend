@@ -13,10 +13,30 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { profileAPI, UserProfile } from '../../services/profileApi';
+import { academicApi } from '../../services/academicApi';
 import { useAuth } from '../../context/AuthContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { showToast } from '../../utils/toast';
+
+type FacultyOption = {
+  id: string;
+  name: string;
+  code?: string;
+};
+
+type DepartmentOption = {
+  id: string;
+  name: string;
+  code?: string;
+  facultyId: string;
+};
+
+type LevelOption = {
+  id: string;
+  levelNumber: number;
+  displayName?: string;
+};
 
 export default function ProfileScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -41,51 +61,148 @@ export default function ProfileScreen() {
   const [address, setAddress] = useState('');
   const [country, setCountry] = useState('');
   const [profileImage, setProfileImage] = useState('');
+  const [faculties, setFaculties] = useState<FacultyOption[]>([]);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [levelOptions, setLevelOptions] = useState<LevelOption[]>([]);
+  const [academicsLoading, setAcademicsLoading] = useState(false);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [levelsLoading, setLevelsLoading] = useState(false);
+  const [selectedFacultyId, setSelectedFacultyId] = useState('');
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+  const [selectedLevelId, setSelectedLevelId] = useState('');
 
   const [errors, setErrors] = useState<{ [k: string]: string | undefined }>({});
 
   const levels = useMemo(() => ['100', '200', '300', '400', '500'], []);
   const genders = useMemo(() => ['Male', 'Female', 'Other'] as const, []);
 
-  useEffect(() => {
-    loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const loadDepartments = async (facultyId: string) => {
+    if (!facultyId) {
+      setDepartments([]);
+      return [];
+    }
+
+    try {
+      setDepartmentsLoading(true);
+      const response = await academicApi.getFacultyDepartments(facultyId);
+      const options = (response?.departments || []) as DepartmentOption[];
+      setDepartments(options);
+      return options;
+    } catch {
+      setDepartments([]);
+      showToast.error('Unable to load departments for the selected faculty.');
+      return [];
+    } finally {
+      setDepartmentsLoading(false);
+    }
+  };
+
+  const loadLevels = async (departmentId: string) => {
+    if (!departmentId) {
+      setLevelOptions([]);
+      return [];
+    }
+
+    try {
+      setLevelsLoading(true);
+      const response = await academicApi.getDepartmentLevels(departmentId);
+      const options = (response?.levels || []) as LevelOption[];
+      setLevelOptions(options);
+      return options;
+    } catch {
+      setLevelOptions([]);
+      showToast.error('Unable to load levels for the selected department.');
+      return [];
+    } finally {
+      setLevelsLoading(false);
+    }
+  };
 
   const loadProfile = async () => {
     setLoading(true);
-    const result = await profileAPI.getProfile();
-    if (result.success && result.data.user) {
-      const u = result.data.user as UserProfile & { dateOfBirth?: string };
-      setProfile(u);
-      setName(u.name || '');
-      setBio(u.bio || '');
-      setLevel(u.level || '');
-      setDepartment(u.department || '');
-      setFaculty(u.faculty || '');
-      setPhone(u.phone || '');
-      setGender((u.gender as any) || '');
-      setDateOfBirth(u?.dateOfBirth ? new Date(u.dateOfBirth as any).toISOString().slice(0, 10) : '');
-      setAddress(u.address || '');
-      setCountry(u.country || '');
-      setProfileImage(u.profileImage || '');
+
+    try {
+      setAcademicsLoading(true);
+      const [result, facultiesResult] = await Promise.all([
+        profileAPI.getProfile(),
+        academicApi.getFaculties().catch(() => null),
+      ]);
+
+      const facultyOptions = (facultiesResult?.faculties || []) as FacultyOption[];
+      setFaculties(facultyOptions);
+
+      if (result.success && result.data.user) {
+        const u = result.data.user as UserProfile;
+        setProfile(u);
+        setName(u.name || '');
+        setBio(u.bio || '');
+        setLevel(u.level || '');
+        setDepartment(u.department || '');
+        setFaculty(u.faculty || '');
+        setPhone(u.phone || '');
+        setGender((u.gender as any) || '');
+        setDateOfBirth(u.dateOfBirth ? new Date(u.dateOfBirth as any).toISOString().slice(0, 10) : '');
+        setAddress(u.address || '');
+        setCountry(u.country || '');
+        setProfileImage(u.profileImage || '');
+        setSelectedFacultyId(u.facultyId || '');
+        setSelectedDepartmentId(u.departmentId || '');
+        setSelectedLevelId(u.levelId || '');
+
+        if (u.facultyId) {
+          await loadDepartments(u.facultyId);
+        } else {
+          setDepartments([]);
+        }
+
+        if (u.departmentId) {
+          await loadLevels(u.departmentId);
+        } else {
+          setLevelOptions([]);
+        }
+
+        return;
+      }
+
+      showToast.error(result.message || 'Failed to load your profile.');
+    } finally {
+      setAcademicsLoading(false);
+      setLoading(false);
     }
-    setLoading(false);
   };
+
+  useEffect(() => {
+    void loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const validate = () => {
     const next: { [k: string]: string | undefined } = {};
+    const academicSelectionChanged = selectedFacultyId !== (profile?.facultyId || '')
+      || selectedDepartmentId !== (profile?.departmentId || '')
+      || selectedLevelId !== (profile?.levelId || '');
+
     if (!name.trim()) next.name = 'Full name is required';
     if (phone && !/^\+?[0-9\-\s]{7,15}$/.test(phone)) next.phone = 'Enter a valid phone number';
     if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) next.dateOfBirth = 'Use format YYYY-MM-DD';
     if (level && !levels.includes(level)) next.level = `Level should be one of ${levels.join(', ')}`;
     if (gender && !genders.includes(gender)) next.gender = 'Gender must be Male, Female or Other';
+    if (academicSelectionChanged && selectedFacultyId && departments.length > 0 && !selectedDepartmentId) {
+      next.department = 'Choose a department to match the selected faculty';
+    }
+    if (academicSelectionChanged && selectedDepartmentId && levelOptions.length > 0 && !selectedLevelId) {
+      next.level = 'Choose a level to match the selected department';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
   const scheduleAutoSave = () => {
-    if (!autoSave || !editing) return;
+    const academicSelectionChanged = selectedFacultyId !== (profile?.facultyId || '')
+      || selectedDepartmentId !== (profile?.departmentId || '')
+      || selectedLevelId !== (profile?.levelId || '');
+
+    if (!autoSave || !editing || academicSelectionChanged) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       if (!validate()) return;
@@ -96,7 +213,13 @@ export default function ProfileScreen() {
   useEffect(() => {
     scheduleAutoSave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, bio, level, department, faculty, phone, gender, dateOfBirth, address, country, profileImage, autoSave, editing]);
+  }, [name, bio, level, department, faculty, phone, gender, dateOfBirth, address, country, profileImage, autoSave, editing, selectedFacultyId, selectedDepartmentId, selectedLevelId]);
+
+  useEffect(() => () => {
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+    }
+  }, []);
 
   const pickImage = async () => {
     if (!editing) return;
@@ -124,12 +247,15 @@ export default function ProfileScreen() {
     const result = await profileAPI.updateProfile({
       name,
       bio,
+      levelId: selectedLevelId || undefined,
       level,
+      departmentId: selectedDepartmentId || undefined,
       department,
+      facultyId: selectedFacultyId || undefined,
       faculty,
       phone,
       gender,
-      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+      dateOfBirth: dateOfBirth || undefined,
       address,
       country,
       profileImage,
@@ -139,12 +265,45 @@ export default function ProfileScreen() {
     if (result.success) {
       if (!silent) showToast.success('Your profile has been updated! ✨', 'Saved');
       if (!silent) setEditing(false);
-      loadProfile();
+      void loadProfile();
       return { success: true };
     }
 
     if (!silent) showToast.error(result.message || 'Failed to update profile', 'Error');
     return { success: false };
+  };
+
+  const handleFacultySelect = async (nextFaculty: FacultyOption) => {
+    setSelectedFacultyId(nextFaculty.id);
+    setFaculty(nextFaculty.name);
+    setSelectedDepartmentId('');
+    setDepartment('');
+    setSelectedLevelId('');
+    setLevel('');
+    setLevelOptions([]);
+    await loadDepartments(nextFaculty.id);
+  };
+
+  const handleDepartmentSelect = async (nextDepartment: DepartmentOption) => {
+    const linkedFaculty = faculties.find((item) => item.id === nextDepartment.facultyId);
+
+    setSelectedDepartmentId(nextDepartment.id);
+    setDepartment(nextDepartment.name);
+    setSelectedLevelId('');
+    setLevel('');
+    setLevelOptions([]);
+
+    if (linkedFaculty) {
+      setSelectedFacultyId(linkedFaculty.id);
+      setFaculty(linkedFaculty.name);
+    }
+
+    await loadLevels(nextDepartment.id);
+  };
+
+  const handleLevelSelect = (nextLevel: LevelOption) => {
+    setSelectedLevelId(nextLevel.id);
+    setLevel(String(nextLevel.levelNumber));
   };
 
   if (loading) {
@@ -161,12 +320,15 @@ export default function ProfileScreen() {
   const textPrimary = isDark ? '#ECF3FF' : '#0F172A';
   const muted = isDark ? '#9CB7D9' : '#64748B';
   const border = isDark ? '#1E3A5F' : '#DCE6F7';
+  const academicSelectionChanged = selectedFacultyId !== (profile?.facultyId || '')
+    || selectedDepartmentId !== (profile?.departmentId || '')
+    || selectedLevelId !== (profile?.levelId || '');
 
   const completionFields = [name, bio, level, department, faculty, phone, gender, dateOfBirth, address, country, profileImage];
   const completion = Math.round((completionFields.filter((v) => (v || '').toString().trim().length > 0).length / completionFields.length) * 100);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: appBg }} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: appBg }} contentContainerStyle={{ paddingBottom: 110 }} >
       <LinearGradient colors={headerGradient} style={styles.heroWrap}>
         <View style={styles.heroTopRow}>
           <TouchableOpacity onPress={pickImage} activeOpacity={0.85}>
@@ -199,10 +361,34 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <TouchableOpacity onPress={() => setEditing((e) => !e)} style={styles.editToggle}>
-            <Ionicons name={editing ? 'close' : 'create-outline'} size={17} color="#FFFFFF" />
-            <Text style={styles.editToggleText}>{editing ? 'Cancel' : 'Edit'}</Text>
-          </TouchableOpacity>
+          <View style={styles.heroActions}>
+            <TouchableOpacity
+              onPress={() => router.push('/settings')}
+              style={styles.settingsIconButton}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                if (editing) {
+                  if (autoSaveTimer.current) {
+                    clearTimeout(autoSaveTimer.current);
+                  }
+                  setEditing(false);
+                  void loadProfile();
+                  return;
+                }
+
+                setEditing(true);
+              }}
+              style={styles.editToggle}
+            >
+              <Ionicons name={editing ? 'close' : 'create-outline'} size={17} color="#FFFFFF" />
+              <Text style={styles.editToggleText}>{editing ? 'Cancel' : 'Edit'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.completionWrap}>
@@ -222,6 +408,9 @@ export default function ProfileScreen() {
               <View style={[styles.knob, autoSave && styles.knobOn]} />
             </TouchableOpacity>
           </View>
+        ) : null}
+        {editing && academicSelectionChanged ? (
+          <Text style={styles.editingHint}>Academic changes wait for manual save so your selections stay in sync.</Text>
         ) : null}
       </LinearGradient>
 
@@ -246,6 +435,9 @@ export default function ProfileScreen() {
       <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}> 
         <Text style={[styles.cardTitle, { color: textPrimary }]}>Academic Identity</Text>
         <Text style={[styles.cardSubtitle, { color: muted }]}>Your official university profile details</Text>
+        {editing ? (
+          <Text style={[styles.selectorHint, { color: muted }]}>Choose from the live faculty, department, and level records so profile saves stay valid.</Text>
+        ) : null}
 
         <View style={styles.fieldBlock}>
           <Text style={[styles.fieldLabel, { color: muted }]}>Full Name</Text>
@@ -266,29 +458,91 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.row2}>
-          <View style={styles.col}>
-            <Text style={[styles.fieldLabel, { color: muted }]}>Department</Text>
-            <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={department} onChangeText={setDepartment} editable={editing} placeholder="Department" placeholderTextColor={muted} />
-          </View>
-          <View style={styles.col}>
-            <Text style={[styles.fieldLabel, { color: muted }]}>Faculty</Text>
-            <TextInput style={[styles.input, { color: textPrimary, borderColor: border }]} value={faculty} onChangeText={setFaculty} editable={editing} placeholder="Faculty" placeholderTextColor={muted} />
-          </View>
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Faculty</Text>
+          {editing ? (
+            <View style={[styles.selectorPanel, { borderColor: border, backgroundColor: isDark ? '#0A1B2F' : '#F8FAFC' }]}>
+              {academicsLoading ? (
+                <ActivityIndicator color={isDark ? '#60A5FA' : '#1D4ED8'} />
+              ) : faculties.length ? (
+                <View style={styles.chipsRow}>
+                  {faculties.map((item) => {
+                    const active = selectedFacultyId === item.id;
+                    return (
+                      <TouchableOpacity key={item.id} onPress={() => void handleFacultySelect(item)} style={[styles.chip, active && styles.chipActive]}>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{item.code || item.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={[styles.selectorEmpty, { color: muted }]}>No active faculties available right now.</Text>
+              )}
+              <Text style={[styles.selectorValue, { color: faculty ? textPrimary : muted }]}>{faculty || 'No faculty selected'}</Text>
+            </View>
+          ) : (
+            <View style={[styles.input, { borderColor: border, justifyContent: 'center' }]}>
+              <Text style={{ color: faculty ? textPrimary : muted }}>{faculty || 'Not set'}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.fieldBlock}>
+          <Text style={[styles.fieldLabel, { color: muted }]}>Department</Text>
+          {editing ? (
+            <View style={[styles.selectorPanel, { borderColor: border, backgroundColor: isDark ? '#0A1B2F' : '#F8FAFC' }]}>
+              {departmentsLoading ? (
+                <ActivityIndicator color={isDark ? '#60A5FA' : '#1D4ED8'} />
+              ) : departments.length ? (
+                <View style={styles.chipsRow}>
+                  {departments.map((item) => {
+                    const active = selectedDepartmentId === item.id;
+                    return (
+                      <TouchableOpacity key={item.id} onPress={() => void handleDepartmentSelect(item)} style={[styles.chip, active && styles.chipActive]}>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{item.code || item.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={[styles.selectorEmpty, { color: muted }]}>
+                  {selectedFacultyId ? 'No departments found for this faculty yet.' : 'Select a faculty first.'}
+                </Text>
+              )}
+              <Text style={[styles.selectorValue, { color: department ? textPrimary : muted }]}>{department || 'No department selected'}</Text>
+            </View>
+          ) : (
+            <View style={[styles.input, { borderColor: border, justifyContent: 'center' }]}>
+              <Text style={{ color: department ? textPrimary : muted }}>{department || 'Not set'}</Text>
+            </View>
+          )}
+          {!!errors.department && <Text style={styles.errorText}>{errors.department}</Text>}
         </View>
 
         <View style={styles.fieldBlock}>
           <Text style={[styles.fieldLabel, { color: muted }]}>Level</Text>
           {editing ? (
-            <View style={styles.chipsRow}>
-              {levels.map((lv) => {
-                const active = level === lv;
-                return (
-                  <TouchableOpacity key={lv} onPress={() => setLevel(lv)} style={[styles.chip, active && styles.chipActive]}>
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{lv}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={[styles.selectorPanel, { borderColor: border, backgroundColor: isDark ? '#0A1B2F' : '#F8FAFC' }]}>
+              {levelsLoading ? (
+                <ActivityIndicator color={isDark ? '#60A5FA' : '#1D4ED8'} />
+              ) : levelOptions.length ? (
+                <View style={styles.chipsRow}>
+                  {levelOptions.map((item) => {
+                    const active = selectedLevelId === item.id;
+                    const label = item.displayName || String(item.levelNumber);
+                    return (
+                      <TouchableOpacity key={item.id} onPress={() => handleLevelSelect(item)} style={[styles.chip, active && styles.chipActive]}>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={[styles.selectorEmpty, { color: muted }]}>
+                  {selectedDepartmentId ? 'No active levels found for this department.' : 'Select a department first.'}
+                </Text>
+              )}
+              <Text style={[styles.selectorValue, { color: level ? textPrimary : muted }]}>{level || 'No level selected'}</Text>
             </View>
           ) : (
             <View style={[styles.input, { borderColor: border, justifyContent: 'center' }]}>
@@ -361,8 +615,11 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={[styles.button, styles.btnOutline, { borderColor: isDark ? '#F87171' : '#DC2626' }]}
               onPress={() => {
+                if (autoSaveTimer.current) {
+                  clearTimeout(autoSaveTimer.current);
+                }
                 setEditing(false);
-                loadProfile();
+                void loadProfile();
               }}
               disabled={saving}
             >
@@ -459,6 +716,20 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
     paddingTop: 2,
+  },
+  heroActions: {
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  settingsIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
   },
   displayName: {
     fontSize: 22,
@@ -620,6 +891,19 @@ const styles = StyleSheet.create({
     marginTop: 3,
     marginBottom: 12,
   },
+  editingHint: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    color: '#E6F0FF',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  selectorHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -4,
+    marginBottom: 12,
+  },
 
   row2: {
     flexDirection: 'row',
@@ -647,6 +931,22 @@ const styles = StyleSheet.create({
     minHeight: 88,
     textAlignVertical: 'top',
     paddingTop: 10,
+  },
+  selectorPanel: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  selectorEmpty: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  selectorValue: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 
   chipsRow: {

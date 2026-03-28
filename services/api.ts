@@ -43,16 +43,17 @@ const toApiError = (error: unknown, fallbackMessage: string): ApiError => {
     return error;
   }
 
-  const axiosError = error as AxiosError<{ message?: string }>;
+  const axiosError = error as AxiosError<{ message?: string; error?: string; details?: unknown }>;
   const message =
     axiosError.response?.data?.message ||
+    axiosError.response?.data?.error ||
     axiosError.message ||
     fallbackMessage;
 
   return new ApiError(message, {
     status: axiosError.response?.status,
     code: axiosError.code,
-    details: axiosError.response?.data,
+    details: axiosError.response?.data?.details ?? axiosError.response?.data,
   });
 };
 

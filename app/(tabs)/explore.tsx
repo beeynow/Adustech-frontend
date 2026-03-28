@@ -1,270 +1,145 @@
 import React from 'react';
+import { Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  useColorScheme,
-  TouchableOpacity,
-  TextInput,
-} from 'react-native';
+  ActionButton,
+  HeroCard,
+  InputField,
+  ScreenShell,
+  SectionHeading,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
+
+const categories: Array<{ icon: keyof typeof Ionicons.glyphMap; name: string; count: number }> = [
+  { icon: 'book-outline', name: 'Courses', count: 24 },
+  { icon: 'people-outline', name: 'Community', count: 156 },
+  { icon: 'library-outline', name: 'Library', count: 89 },
+  { icon: 'calendar-outline', name: 'Events', count: 12 },
+  { icon: 'briefcase-outline', name: 'Jobs', count: 8 },
+  { icon: 'trophy-outline', name: 'Achievements', count: 34 },
+];
+
+const trending: Array<{ icon: keyof typeof Ionicons.glyphMap; title: string; category: string; students: number }> = [
+  {
+    icon: 'flame-outline',
+    title: 'Introduction to AI',
+    category: 'Computer Science',
+    students: 1234,
+  },
+  {
+    icon: 'flash-outline',
+    title: 'Web Development Bootcamp',
+    category: 'Programming',
+    students: 890,
+  },
+  {
+    icon: 'stats-chart-outline',
+    title: 'Data Science Fundamentals',
+    category: 'Data Science',
+    students: 756,
+  },
+  {
+    icon: 'phone-portrait-outline',
+    title: 'Mobile App Development',
+    category: 'Development',
+    students: 645,
+  },
+];
 
 export default function ExploreScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const categories = [
-    { icon: '📚', name: 'Courses', count: 24 },
-    { icon: '👥', name: 'Community', count: 156 },
-    { icon: '📖', name: 'Library', count: 89 },
-    { icon: '🎓', name: 'Events', count: 12 },
-    { icon: '💼', name: 'Jobs', count: 8 },
-    { icon: '🏆', name: 'Achievements', count: 34 },
-  ];
-
-  const trending = [
-    {
-      icon: '🔥',
-      title: 'Introduction to AI',
-      category: 'Computer Science',
-      students: 1234,
-    },
-    {
-      icon: '⚡',
-      title: 'Web Development Bootcamp',
-      category: 'Programming',
-      students: 890,
-    },
-    {
-      icon: '🌟',
-      title: 'Data Science Fundamentals',
-      category: 'Data Science',
-      students: 756,
-    },
-    {
-      icon: '💡',
-      title: 'Mobile App Development',
-      category: 'Development',
-      students: 645,
-    },
-  ];
+  const theme = useAppTheme();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
-      <View style={styles.content}>
-        {/* Search Bar */}
-        <View style={[styles.searchContainer, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={[styles.searchInput, { color: isDark ? '#FFFFFF' : '#0A1929' }]}
-            placeholder="Search courses, people, resources..."
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
-        </View>
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="Explore"
+        title="Discover the best of campus life"
+        subtitle="Browse academic categories, trending student interests, and practical recommendations from a more modern discovery hub."
+        icon="compass-outline"
+      />
 
-        {/* Categories */}
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-          Categories
-        </Text>
-        <View style={styles.categoriesGrid}>
-          {categories.map((category, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[styles.categoryCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}
+      <InputField
+        icon="search-outline"
+        placeholder="Search courses, people, resources..."
+      />
+
+      <SectionHeading title="Categories" subtitle="Fast entry points into the most useful parts of the university ecosystem." />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        {categories.map((category) => (
+          <SurfaceCard key={category.name} style={{ width: '47.5%', padding: 16 }}>
+            <View
+              style={{
+                width: 50,
+                height: 50,
+                borderRadius: 18,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: theme.accentSoft,
+                marginBottom: 14,
+              }}
             >
-              <Text style={styles.categoryIcon}>{category.icon}</Text>
-              <Text style={[styles.categoryName, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-                {category.name}
-              </Text>
-              <Text style={[styles.categoryCount, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-                {category.count}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Trending */}
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-          Trending Now
-        </Text>
-        {trending.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={[styles.trendingCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}
-          >
-            <Text style={styles.trendingIcon}>{item.icon}</Text>
-            <View style={styles.trendingContent}>
-              <Text style={[styles.trendingTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-                {item.title}
-              </Text>
-              <Text style={[styles.trendingCategory, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-                {item.category}
-              </Text>
-              <Text style={[styles.trendingStudents, { color: isDark ? '#42A5F5' : '#1976D2' }]}>
-                👥 {item.students.toLocaleString()} students
-              </Text>
+              <Ionicons name={category.icon} size={22} color={theme.accent} />
             </View>
-            <Text style={[styles.trendingArrow, { color: isDark ? '#42A5F5' : '#1976D2' }]}>›</Text>
-          </TouchableOpacity>
+            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '900' }}>{category.name}</Text>
+            <Text style={{ color: theme.textMuted, marginTop: 6, fontWeight: '700' }}>{category.count} available</Text>
+          </SurfaceCard>
         ))}
-
-        {/* Recommendations */}
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-          Recommended for You
-        </Text>
-        <View style={[styles.recommendationCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={styles.recommendationIcon}>✨</Text>
-          <Text style={[styles.recommendationTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-            Complete Your Profile
-          </Text>
-          <Text style={[styles.recommendationText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-            Get personalized course recommendations by completing your profile information.
-          </Text>
-          <TouchableOpacity
-            style={[styles.recommendationButton, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}
-          >
-            <Text style={styles.recommendationButtonText}>Complete Profile</Text>
-          </TouchableOpacity>
-        </View>
       </View>
-    </ScrollView>
+
+      <SectionHeading title="Trending Now" subtitle="What students are currently leaning into across learning and community spaces." />
+      <View style={{ gap: 12 }}>
+        {trending.map((item) => (
+          <SurfaceCard key={item.title}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View
+                style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: 18,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.accentSoft,
+                }}
+              >
+                <Ionicons name={item.icon} size={22} color={theme.accent} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '900' }}>{item.title}</Text>
+                <Text style={{ color: theme.textMuted, marginTop: 4 }}>{item.category}</Text>
+                <Text style={{ color: theme.accent, marginTop: 8, fontWeight: '800' }}>
+                  {item.students.toLocaleString()} students
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={18} color={theme.textSoft} />
+            </View>
+          </SurfaceCard>
+        ))}
+      </View>
+
+      <SectionHeading title="Recommended for You" subtitle="A simple upgrade path to unlock smarter personalization." />
+      <SurfaceCard>
+        <View
+          style={{
+            width: 58,
+            height: 58,
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.accentSoft,
+            marginBottom: 14,
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={26} color={theme.accent} />
+        </View>
+        <Text style={{ color: theme.text, fontSize: 18, fontWeight: '900' }}>Complete your profile</Text>
+        <Text style={{ color: theme.textMuted, marginTop: 8, lineHeight: 22 }}>
+          Add your department, level, and interests so the app can surface more relevant channels, resources, and academic opportunities.
+        </Text>
+        <ActionButton label="Complete Profile" icon="person-circle-outline" style={{ marginTop: 18 }} />
+      </SurfaceCard>
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  searchIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  categoryCard: {
-    width: '48%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  categoryIcon: {
-    fontSize: 36,
-    marginBottom: 8,
-  },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  categoryCount: {
-    fontSize: 12,
-  },
-  trendingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  trendingIcon: {
-    fontSize: 32,
-    marginRight: 16,
-  },
-  trendingContent: {
-    flex: 1,
-  },
-  trendingTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  trendingCategory: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  trendingStudents: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  trendingArrow: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  recommendationCard: {
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  recommendationIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  recommendationTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  recommendationText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  recommendationButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  recommendationButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-});

@@ -1,215 +1,128 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-} from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { departmentsAPI, Department } from '../services/departmentsApi';
+import { Pressable, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { departmentsAPI, type Department } from '@/services/departmentsApi';
+import {
+  Chip,
+  EmptyState,
+  HeroCard,
+  LoadingState,
+  ScreenShell,
+  SectionHeading,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
+import { showToast } from '@/utils/toast';
 
 export default function DepartmentsScreen() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
+  const theme = useAppTheme();
+
+  useEffect(() => {
+    loadDepartments();
+  }, []);
 
   const loadDepartments = async () => {
     try {
       const data = await departmentsAPI.list({ isActive: true });
       setDepartments(data.departments || []);
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to load departments');
+      showToast.error(error.response?.data?.message || 'Failed to load departments');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    loadDepartments();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadDepartments();
-  };
-
-  const handleDepartmentPress = (department: Department) => {
-    // Navigate to department channel/feed
-    router.push(`/department/${department.id}`);
-  };
-
-  const renderDepartment = ({ item }: { item: Department }) => (
-    <TouchableOpacity
-      style={styles.departmentCard}
-      onPress={() => handleDepartmentPress(item)}
-    >
-      <View style={styles.departmentIcon}>
-        <Ionicons name="school" size={32} color="#667eea" />
-      </View>
-      <View style={styles.departmentInfo}>
-        <Text style={styles.departmentName}>{item.name}</Text>
-        <Text style={styles.departmentCode}>{item.code}</Text>
-        {item.description && (
-          <Text style={styles.departmentDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-        {item.faculty && (
-          <Text style={styles.departmentFaculty}>{item.faculty}</Text>
-        )}
-        <View style={styles.levelsContainer}>
-          {item.levels.map((level) => (
-            <View key={level} style={styles.levelBadge}>
-              <Text style={styles.levelText}>{level}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={24} color="#999" />
-    </TouchableOpacity>
-  );
-
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <Stack.Screen options={{ title: 'Departments' }} />
-        <ActivityIndicator size="large" color="#1976D2" />
-      </View>
+      <ScreenShell>
+        <LoadingState label="Loading department channels…" />
+      </ScreenShell>
     );
   }
 
+  const totalLevels = departments.reduce((sum, department) => sum + (department.levels?.length || 0), 0);
+
   return (
-    <View style={styles.container}>
-      <Stack.Screen 
-        options={{ 
-          title: 'Department Channels',
-          headerStyle: { backgroundColor: '#1976D2' },
-          headerTintColor: '#fff',
-        }} 
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="Departments"
+        title="Academic spaces organized clearly"
+        subtitle="Browse department channels with a more modern view of codes, faculty context, and available levels."
+        icon="school-outline"
+      >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Chip label={`${departments.length} departments`} icon="business-outline" tone="accent" />
+          <Chip label={`${totalLevels} level groups`} icon="layers-outline" tone="success" />
+        </View>
+      </HeroCard>
+
+      <SectionHeading
+        title="Department Channels"
+        subtitle="Open any department to view its announcement room and level-specific spaces."
       />
-      
-      <FlatList
-        data={departments}
-        renderItem={renderDepartment}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="school-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No departments available</Text>
-            <Text style={styles.emptySubtext}>
-              Departments will appear here once created by administrators
-            </Text>
-          </View>
-        }
-      />
-    </View>
+
+      {departments.length === 0 ? (
+        <EmptyState
+          title="No departments available"
+          subtitle="Departments will appear here once administrators publish the academic structure."
+          icon="school-outline"
+        />
+      ) : (
+        <View style={{ gap: 12 }}>
+          {departments.map((department) => (
+            <Pressable key={department.id} onPress={() => router.push(`/department/${department.id}`)}>
+              <SurfaceCard>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+                  <View
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: 18,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: theme.accentSoft,
+                    }}
+                  >
+                    <Ionicons name="school-outline" size={24} color={theme.accent} />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>{department.name}</Text>
+                        <Text style={{ color: theme.accent, marginTop: 4, fontSize: 13, fontWeight: '800' }}>{department.code}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={theme.textSoft} />
+                    </View>
+
+                    {!!department.description ? (
+                      <Text style={{ color: theme.textMuted, marginTop: 10, lineHeight: 21 }}>
+                        {department.description}
+                      </Text>
+                    ) : null}
+
+                    {department.faculty ? (
+                      <Text style={{ color: theme.textSoft, marginTop: 8, fontSize: 13, fontWeight: '700' }}>
+                        Faculty: {department.faculty}
+                      </Text>
+                    ) : null}
+
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                      {(department.levels || []).map((level) => (
+                        <Chip key={level} label={`Level ${level}`} icon="layers-outline" tone="neutral" />
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              </SurfaceCard>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  listContent: {
-    padding: 16,
-  },
-  departmentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  departmentIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  departmentInfo: {
-    flex: 1,
-  },
-  departmentName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  departmentCode: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#667eea',
-    marginBottom: 4,
-  },
-  departmentDescription: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  departmentFaculty: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 8,
-  },
-  levelsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  levelBadge: {
-    backgroundColor: '#e8eaf6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  levelText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#667eea',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 40,
-  },
-});

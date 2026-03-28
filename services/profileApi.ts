@@ -7,15 +7,18 @@ export interface UserProfile {
   bio?: string;
   profileImage?: string;
   level?: string;
+  levelId?: string | null;
   department?: string;
+  departmentId?: string | null;
   faculty?: string;
+  facultyId?: string | null;
   phone?: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: string | Date | null;
   gender?: 'Male' | 'Female' | 'Other' | '';
   address?: string;
   country?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export const profileAPI = {
@@ -40,7 +43,9 @@ export const profileAPI = {
     } catch (error: any) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to update profile',
+        message: error.response?.data?.errors?.[0]?.msg
+          || error.response?.data?.message
+          || 'Failed to update profile',
       };
     }
   },

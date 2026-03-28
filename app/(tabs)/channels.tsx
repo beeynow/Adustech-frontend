@@ -1,411 +1,398 @@
-/**
- * ============================================================================
- * INTEGRATED CHANNELS PAGE
- * Bulletproof channels with auto profile integration
- * Automatically shows channels for user's faculty, department, and level
- * ============================================================================
- */
+import React, { useCallback, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { ActionButton, Chip, HeroCard, LoadingState, ScreenShell, SectionHeading } from '@/components/ui/AppChrome';
+import { formatPostCount, formatPostTimeAgo } from '@/components/posts/postUi';
+import { useAuth } from '@/context/AuthContext';
+import type { UserProfile } from '@/services/profileApi';
+import { profileAPI } from '@/services/profileApi';
+import { postsAPI } from '@/services/postsApi';
+import { showToast } from '@/utils/toast';
+import { useAppTheme } from '@/utils/theme';
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput
-} from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import integratedChannelsApi from '@/services/integratedChannelsApi';
-import { showToast } from '../../utils/toast';
+type RoomKey = 'department' | 'level' | 'timetable' | 'events';
+
+type RoomSummary = {
+  available: boolean;
+  total: number;
+  latestAt: string;
+};
+
+const EMPTY_SUMMARY: RoomSummary = {
+  available: false,
+  total: 0,
+  latestAt: '',
+};
+
+const ROOM_META: Record<RoomKey, {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route: string;
+}> = {
+  department: {
+    title: 'Department',
+    subtitle: 'Posts for your current department',
+    icon: 'business-outline',
+    route: '/department-room',
+  },
+  level: {
+    title: 'Class (Level)',
+    subtitle: 'Posts for your level and class stream',
+    icon: 'layers-outline',
+    route: '/level-room',
+  },
+  timetable: {
+    title: 'Timetable',
+    subtitle: 'Timetable and schedule post room',
+    icon: 'calendar-outline',
+    route: '/timetable-room',
+  },
+  events: {
+    title: 'Events',
+    subtitle: 'Event announcements and activity posts',
+    icon: 'megaphone-outline',
+    route: '/events-room',
+  },
+};
+
+const getRoomGradient = (key: RoomKey, isDark: boolean): [string, string] => {
+  if (key === 'department') {
+    return isDark ? ['rgba(71, 46, 12, 0.96)', 'rgba(152, 101, 17, 0.92)'] : ['#FFF6E6', '#FFDFA9'];
+  }
+
+  if (key === 'level') {
+    return isDark ? ['rgba(67, 21, 30, 0.96)', 'rgba(146, 53, 76, 0.92)'] : ['#FFF0F4', '#FFC9D4'];
+  }
+
+  if (key === 'timetable') {
+    return isDark ? ['rgba(12, 45, 79, 0.96)', 'rgba(28, 112, 196, 0.92)'] : ['#EEF7FF', '#CFE6FF'];
+  }
+
+  return isDark ? ['rgba(8, 58, 45, 0.96)', 'rgba(16, 148, 107, 0.9)'] : ['#EAFBF5', '#BFEEDC'];
+};
+
+const getRoomAccent = (key: RoomKey, theme: ReturnType<typeof useAppTheme>) => {
+  if (key === 'department') {
+    return theme.warning;
+  }
+
+  if (key === 'level') {
+    return theme.danger;
+  }
+
+  if (key === 'timetable') {
+    return theme.accent;
+  }
+
+  return theme.success;
+};
+
+const buildRoomSummary = async (
+  key: RoomKey,
+  profile: UserProfile | null
+): Promise<RoomSummary> => {
+  try {
+    if (key === 'department') {
+      if (!profile?.departmentId) {
+        return EMPTY_SUMMARY;
+      }
+
+      const response = await postsAPI.list({
+        departmentId: profile.departmentId,
+        limit: 1,
+      });
+
+      return {
+        available: true,
+        total: response.pagination.total,
+        latestAt: response.posts[0]?.createdAt || '',
+      };
+    }
+
+    if (key === 'level') {
+      if (!profile?.departmentId || (!profile.levelId && !profile.level)) {
+        return EMPTY_SUMMARY;
+      }
+
+      const response = await postsAPI.list({
+        departmentId: profile.departmentId,
+        ...(profile.levelId ? { levelId: profile.levelId } : {}),
+        ...(profile.level ? { level: profile.level } : {}),
+        limit: 1,
+      });
+
+      return {
+        available: true,
+        total: response.pagination.total,
+        latestAt: response.posts[0]?.createdAt || '',
+      };
+    }
+
+    const response = await postsAPI.list({
+      category: key === 'timetable' ? 'Timetable' : 'Event',
+      limit: 1,
+    });
+
+    return {
+      available: true,
+      total: response.pagination.total,
+      latestAt: response.posts[0]?.createdAt || '',
+    };
+  } catch {
+    return {
+      ...EMPTY_SUMMARY,
+      available: key === 'timetable' || key === 'events',
+    };
+  }
+};
 
 export default function ChannelsPage() {
+  const router = useRouter();
+  const theme = useAppTheme();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [myChannels, setMyChannels] = useState<any[]>([]);
-  const [recommended, setRecommended] = useState<any[]>([]);
-  const [showRecommended, setShowRecommended] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [summaries, setSummaries] = useState<Record<RoomKey, RoomSummary>>({
+    department: EMPTY_SUMMARY,
+    level: EMPTY_SUMMARY,
+    timetable: EMPTY_SUMMARY,
+    events: EMPTY_SUMMARY,
+  });
 
-  useEffect(() => {
-    loadChannels();
-    autoJoinChannels();
-  }, []);
+  const canCreatePosts = ['power', 'admin', 'd-admin'].includes(user?.role || '');
 
-  const autoJoinChannels = async () => {
-    try {
-      // Auto-join channels based on user profile
-      await integratedChannelsApi.autoJoinChannels();
-    } catch {
-      showToast.info('Some suggested channels could not be auto-joined yet.');
-    }
-  };
-
-  const loadChannels = async () => {
+  const loadRoomHub = useCallback(async () => {
     try {
       setLoading(true);
 
-      const [myChannelsData, recommendedData] = await Promise.all([
-        integratedChannelsApi.getMyChannels(),
-        integratedChannelsApi.getRecommendedChannels()
-      ]);
+      const profileResponse = await profileAPI.getProfile();
+      const nextProfile = profileResponse.success
+        ? ((profileResponse.data?.user || null) as UserProfile | null)
+        : null;
 
-      setMyChannels(myChannelsData.channels || []);
-      setRecommended(recommendedData.recommended || []);
+      setProfile(nextProfile);
 
-    } catch {
-      showToast.error('Failed to load channels.');
+      const roomEntries = await Promise.all(
+        (Object.keys(ROOM_META) as RoomKey[]).map(async (key) => ([
+          key,
+          await buildRoomSummary(key, nextProfile),
+        ] as const))
+      );
+
+      setSummaries(Object.fromEntries(roomEntries) as Record<RoomKey, RoomSummary>);
+
+      if (!profileResponse.success) {
+        showToast.error(profileResponse.message || 'Unable to load your room profile.');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadChannels();
-    setRefreshing(false);
-  };
+  useFocusEffect(
+    useCallback(() => {
+      void loadRoomHub();
+    }, [loadRoomHub])
+  );
 
-  const handleJoinChannel = async (channelId: string) => {
-    try {
-      await integratedChannelsApi.joinChannel(channelId);
-      showToast.success('Joined channel successfully.');
-      await loadChannels();
-    } catch (error: any) {
-      showToast.error(error.response?.data?.message || 'Failed to join channel');
+  const heroChips = useMemo(() => {
+    const items = [];
+
+    if (profile?.department) {
+      items.push({ label: profile.department, icon: 'business-outline' as const, tone: 'warning' as const });
     }
-  };
 
-  const getScopeIcon = (scope: string) => {
-    switch (scope) {
-      case 'global': return 'globe';
-      case 'faculty': return 'school';
-      case 'department': return 'business';
-      case 'level': return 'book';
-      default: return 'chatbubbles';
+    if (profile?.level) {
+      items.push({ label: `${profile.level} Level`, icon: 'layers-outline' as const, tone: 'danger' as const });
     }
-  };
 
-  const getScopeColor = (scope: string) => {
-    switch (scope) {
-      case 'global': return '#1e88e5';
-      case 'faculty': return '#4caf50';
-      case 'department': return '#ff9800';
-      case 'level': return '#e91e63';
-      default: return '#757575';
-    }
-  };
+    items.push({ label: `${formatPostCount(
+      summaries.department.total + summaries.level.total + summaries.timetable.total + summaries.events.total
+    )} posts`, icon: 'document-text-outline' as const, tone: 'accent' as const });
 
-  const openChannel = (channel: any) => {
-    if (channel.scope === 'faculty' && channel.facultyId) {
-      router.push(`/faculty-channel/${channel.facultyId}`);
+    return items;
+  }, [profile?.department, profile?.level, summaries.department.total, summaries.events.total, summaries.level.total, summaries.timetable.total]);
+
+  const handleOpenRoom = (key: RoomKey) => {
+    const room = ROOM_META[key];
+    const summary = summaries[key];
+
+    if ((key === 'department' || key === 'level') && !summary.available) {
+      showToast.info(`Add your ${key === 'department' ? 'department' : 'department and level'} to your profile first.`);
       return;
     }
 
-    if (channel.scope === 'department' && channel.departmentId) {
-      router.push(`/department/${channel.departmentId}`);
-      return;
-    }
-
-    if (channel.scope === 'level' && channel.levelId) {
-      router.push(`/level-channel/${channel.levelId}`);
-      return;
-    }
-
-    router.push(`/channel/${channel.id}`);
+    router.push(room.route);
   };
-
-  const renderMyChannel = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.channelCard}
-      onPress={() => openChannel(item)}
-    >
-      <View style={[styles.scopeIcon, { backgroundColor: getScopeColor(item.scope) }]}>
-        <Ionicons name={getScopeIcon(item.scope)} size={24} color="#fff" />
-      </View>
-      
-      <View style={styles.channelInfo}>
-        <Text style={styles.channelName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.channelDescription} numberOfLines={1}>
-            {item.description}
-          </Text>
-        )}
-        <View style={styles.channelMeta}>
-          <View style={styles.metaItem}>
-            <Ionicons name="people" size={14} color="#666" />
-            <Text style={styles.metaText}>{item.memberCount}</Text>
-          </View>
-          <View style={styles.scopeBadge}>
-            <Text style={styles.scopeText}>{item.scope}</Text>
-          </View>
-        </View>
-      </View>
-
-      <Ionicons name="chevron-forward" size={24} color="#999" />
-    </TouchableOpacity>
-  );
-
-  const renderRecommendedChannel = ({ item }: { item: any }) => (
-    <View style={styles.channelCard}>
-      <View style={[styles.scopeIcon, { backgroundColor: getScopeColor(item.scope) }]}>
-        <Ionicons name={getScopeIcon(item.scope)} size={24} color="#fff" />
-      </View>
-      
-      <View style={styles.channelInfo}>
-        <Text style={styles.channelName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.channelDescription} numberOfLines={1}>
-            {item.description}
-          </Text>
-        )}
-      </View>
-
-      <TouchableOpacity
-        style={styles.joinButton}
-        onPress={() => handleJoinChannel(item.id)}
-      >
-        <Ionicons name="add-circle" size={28} color="#4caf50" />
-      </TouchableOpacity>
-    </View>
-  );
-
-  const filteredChannels = myChannels.filter(channel =>
-    channel.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1e88e5" />
-        <Text style={styles.loadingText}>Loading channels...</Text>
-      </View>
-    );
-  }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Channels</Text>
-        <Text style={styles.headerSubtitle}>
-          Auto-joined based on your profile
-        </Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#999" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search channels..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, !showRecommended && styles.tabActive]}
-          onPress={() => setShowRecommended(false)}
-        >
-          <Text style={[styles.tabText, !showRecommended && styles.tabTextActive]}>
-            My Channels ({myChannels.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, showRecommended && styles.tabActive]}
-          onPress={() => setShowRecommended(true)}
-        >
-          <Text style={[styles.tabText, showRecommended && styles.tabTextActive]}>
-            Recommended ({recommended.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <FlatList
-        data={showRecommended ? recommended : filteredChannels}
-        keyExtractor={(item) => item.id}
-        renderItem={showRecommended ? renderRecommendedChannel : renderMyChannel}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name={showRecommended ? "search" : "chatbubbles-outline"}
-              size={64}
-              color="#ccc"
+    <ScreenShell scroll contentContainerStyle={styles.content}>
+      <HeroCard
+        eyebrow="Rooms"
+        title="A focused hub for academic post rooms"
+        subtitle="Jump straight into the post spaces that matter most to you right now: your department, your class, timetable updates, and events."
+        icon="grid-outline"
+        actions={canCreatePosts ? (
+          <View style={styles.heroAction}>
+            <ActionButton
+              label="Create"
+              icon="add"
+              onPress={() => router.push('/(tabs)/upload')}
             />
-            <Text style={styles.emptyText}>
-              {showRecommended
-                ? 'No recommended channels'
-                : 'No channels yet'}
-            </Text>
-            {!showRecommended && (
-              <Text style={styles.emptySubtext}>
-                Channels will appear automatically
-              </Text>
-            )}
           </View>
-        }
+        ) : undefined}
+      >
+        <View style={styles.heroChips}>
+          {heroChips.map((chip) => (
+            <Chip
+              key={`${chip.label}-${chip.icon}`}
+              label={chip.label}
+              icon={chip.icon}
+              tone={chip.tone}
+            />
+          ))}
+        </View>
+      </HeroCard>
+
+      <SectionHeading
+        title="Your Rooms"
+        subtitle="Four dedicated post rooms arranged in a clean 2 by 2 grid."
       />
-    </View>
+
+      {loading ? (
+        <View style={[styles.loadingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <LoadingState label="Loading your rooms…" />
+        </View>
+      ) : (
+        <View style={styles.grid}>
+          {(Object.keys(ROOM_META) as RoomKey[]).map((key) => {
+            const room = ROOM_META[key];
+            const summary = summaries[key];
+            const accent = getRoomAccent(key, theme);
+            const gradient = getRoomGradient(key, theme.isDark);
+
+            return (
+              <Pressable
+                key={key}
+                onPress={() => handleOpenRoom(key)}
+                style={({ pressed }) => [
+                  styles.roomCardPressable,
+                  pressed && styles.roomCardPressed,
+                ]}
+              >
+                <LinearGradient colors={gradient} style={[styles.roomCard, { borderColor: theme.borderStrong }]}>
+                  <View style={styles.roomCardTop}>
+                    <View style={[styles.roomIconWrap, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.78)' }]}>
+                      <Ionicons name={room.icon} size={20} color={accent} />
+                    </View>
+                    <Ionicons
+                      name={summary.available ? 'arrow-forward' : 'lock-closed-outline'}
+                      size={18}
+                      color={theme.isDark ? '#F4FAFF' : '#23415E'}
+                    />
+                  </View>
+
+                  <Text style={[styles.roomTitle, { color: theme.isDark ? '#F4FAFF' : '#10263C' }]}>
+                    {room.title}
+                  </Text>
+                  <Text style={[styles.roomSubtitle, { color: theme.isDark ? 'rgba(244,250,255,0.78)' : '#4D6883' }]}>
+                    {room.subtitle}
+                  </Text>
+
+                  <View style={styles.roomMetaBlock}>
+                    <Text style={[styles.roomCount, { color: theme.isDark ? '#F4FAFF' : '#10263C' }]}>
+                      {summary.available ? `${formatPostCount(summary.total)} posts` : 'Profile needed'}
+                    </Text>
+                    <Text style={[styles.roomLatest, { color: theme.isDark ? 'rgba(244,250,255,0.78)' : '#4D6883' }]}>
+                      {summary.latestAt ? `Latest ${formatPostTimeAgo(summary.latestAt)} ago` : (summary.available ? 'Ready for new updates' : 'Connect this room from your profile')}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5'
+  content: {
+    paddingBottom: 120,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
+  heroAction: {
+    width: 118,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666'
-  },
-  header: {
-    backgroundColor: '#1e88e5',
-    padding: 20,
-    paddingTop: 50
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff'
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#fff',
-    opacity: 0.9,
-    marginTop: 4
-  },
-  searchContainer: {
+  heroChips: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    margin: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 18,
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16
+  loadingCard: {
+    borderWidth: 1,
+    borderRadius: 28,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
   },
-  tabContainer: {
+  grid: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 4
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 8
+  roomCardPressable: {
+    width: '48.2%',
   },
-  tabActive: {
-    backgroundColor: '#1e88e5'
+  roomCardPressed: {
+    opacity: 0.95,
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666'
-  },
-  tabTextActive: {
-    color: '#fff'
-  },
-  channelCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 12,
+  roomCard: {
+    minHeight: 208,
+    borderRadius: 26,
+    borderWidth: 1,
     padding: 16,
-    borderRadius: 12
+    justifyContent: 'space-between',
+    overflow: 'hidden',
   },
-  scopeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12
-  },
-  channelInfo: {
-    flex: 1
-  },
-  channelName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333'
-  },
-  channelDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2
-  },
-  channelMeta: {
+  roomCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8
+    justifyContent: 'space-between',
   },
-  metaItem: {
-    flexDirection: 'row',
+  roomIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
     alignItems: 'center',
-    marginRight: 16
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4
-  },
-  scopeBadge: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4
-  },
-  scopeText: {
-    fontSize: 10,
-    color: '#666',
-    fontWeight: '600'
-  },
-  joinButton: {
-    padding: 4
-  },
-  emptyContainer: {
-    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    minHeight: 300
   },
-  emptyText: {
+  roomTitle: {
     fontSize: 18,
-    color: '#999',
-    marginTop: 16,
-    textAlign: 'center'
+    fontWeight: '900',
+    marginTop: 18,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
+  roomSubtitle: {
+    fontSize: 13,
+    lineHeight: 20,
     marginTop: 8,
-    textAlign: 'center'
-  }
+  },
+  roomMetaBlock: {
+    marginTop: 18,
+    gap: 4,
+  },
+  roomCount: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  roomLatest: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
 });

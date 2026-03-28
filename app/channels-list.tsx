@@ -1,17 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useAuth } from '../context/AuthContext';
-import { channelsAPI, Channel } from '../services/channelsApi';
 import { useRouter } from 'expo-router';
-import { showToast } from '../utils/toast';
+import { useAuth } from '@/context/AuthContext';
+import { channelsAPI, type Channel } from '@/services/channelsApi';
+import { showToast } from '@/utils/toast';
+import {
+  ActionButton,
+  Chip,
+  EmptyState,
+  FloatingActionButton,
+  HeroCard,
+  LoadingState,
+  ScreenShell,
+  SectionHeading,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
 
 export default function ChannelsListScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
+  const theme = useAppTheme();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const canManageChannels = ['power', 'admin', 'd-admin'].includes(user?.role || '');
 
   useEffect(() => {
     loadChannels();
@@ -29,157 +43,108 @@ export default function ChannelsListScreen() {
     }
   };
 
-  const bg = isDark ? '#0A1929' : '#E6F4FE';
-  const card = isDark ? '#0F213A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
-
   const handleChannelPress = (channel: Channel) => {
-    showToast.info(`Opening ${channel.name} in Channels`, 'Redirecting');
+    showToast.info(`Opening ${channel.name} in the Channels tab.`, 'Redirecting');
     router.push('/(tabs)/channels' as any);
   };
 
+  if (loading) {
+    return (
+      <ScreenShell>
+        <LoadingState label="Loading channels…" />
+      </ScreenShell>
+    );
+  }
+
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}> 
-      <ScrollView
-        contentContainerStyle={{ padding: 16 }}
-        showsVerticalScrollIndicator={false}
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="Channels"
+        title="Join the right campus spaces"
+        subtitle="Browse the available rooms for announcements, department updates, and focused student conversations."
+        icon="chatbubbles-outline"
+        actions={canManageChannels ? (
+          <View style={{ width: 120 }}>
+            <ActionButton label="Create" icon="add" onPress={() => router.push('/create-channel' as any)} />
+          </View>
+        ) : undefined}
       >
-        <View style={[styles.card, { backgroundColor: card, borderColor: border }]}> 
-          <Text style={[styles.title, { color: textPrimary }]}>Channels</Text>
-          <Text style={[styles.subtitle, { color: muted, marginBottom: 12 }]}>Join channels to collaborate and stay updated</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Chip label={`${channels.length} channels`} icon="grid-outline" tone="accent" />
+          <Chip label={canManageChannels ? 'Admin access' : 'Member view'} icon="shield-checkmark-outline" tone={canManageChannels ? 'success' : 'neutral'} />
+        </View>
+      </HeroCard>
 
-          {loading && (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={isDark ? '#64B5F6' : '#1976D2'} />
-            </View>
-          )}
+      <SectionHeading
+        title="Available Channels"
+        subtitle="Each card shows the space type, membership hints, and whether it is department-linked."
+      />
 
-          {!loading && channels.length === 0 && (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-              <Ionicons name="chatbubbles-outline" size={48} color={muted} style={{ opacity: 0.3 }} />
-              <Text style={{ color: muted, marginTop: 12, textAlign: 'center' }}>
-                No channels yet. {user?.role === 'power' ? 'Tap + to create one.' : 'Check back soon!'}
-              </Text>
-            </View>
-          )}
-
-          {!loading && channels.map((ch) => {
-            const channelId = ch.id || ch._id || '';
+      {channels.length === 0 ? (
+        <EmptyState
+          title="No channels published yet"
+          subtitle={canManageChannels ? 'Create the first room to give students a dedicated place to talk and receive updates.' : 'New channels will appear here as the platform grows.'}
+          icon="chatbubbles-outline"
+          action={canManageChannels ? (
+            <ActionButton label="Create Channel" icon="add" onPress={() => router.push('/create-channel' as any)} style={{ marginTop: 8, width: '100%' }} />
+          ) : undefined}
+        />
+      ) : (
+        <View style={{ gap: 12 }}>
+          {channels.map((channel) => {
+            const channelId = channel.id || channel._id || '';
+            const isPrivate = channel.visibility === 'private';
             return (
-              <TouchableOpacity
-                key={channelId}
-                style={[styles.channelItem, { borderTopColor: border }]}
-                onPress={() => handleChannelPress(ch)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.channelIcon, { backgroundColor: isDark ? '#1E3A5F' : '#E3F2FD' }]}>
-                  <Ionicons
-                    name={ch.visibility === 'private' ? 'lock-closed' : 'chatbubbles'}
-                    size={20}
-                    color={isDark ? '#64B5F6' : '#1976D2'}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                    <Text style={[styles.channelName, { color: textPrimary }]}>{ch.name}</Text>
-                    {ch.departmentId && (
-                      <View style={[styles.badge, { backgroundColor: isDark ? '#2E7D32' : '#C8E6C9' }]}>
-                        <Text style={[styles.badgeText, { color: isDark ? '#A5D6A7' : '#2E7D32' }]}>Dept</Text>
-                      </View>
-                    )}
-                    {ch.level && (
-                      <View style={[styles.badge, { backgroundColor: isDark ? '#7B1FA2' : '#E1BEE7', marginLeft: 4 }]}>
-                        <Text style={[styles.badgeText, { color: isDark ? '#CE93D8' : '#7B1FA2' }]}>{ch.level}</Text>
-                      </View>
-                    )}
+              <SurfaceCard key={channelId}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+                  <View
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 18,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: theme.accentSoft,
+                    }}
+                  >
+                    <Ionicons
+                      name={isPrivate ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
+                      size={22}
+                      color={theme.accent}
+                    />
                   </View>
-                  {!!ch.description && (
-                    <Text style={{ color: muted, fontSize: 13 }} numberOfLines={1}>
-                      {ch.description}
-                    </Text>
-                  )}
-                  {ch.members && ch.members.length > 0 && (
-                    <Text style={{ color: muted, fontSize: 11, marginTop: 4 }}>
-                      {ch.members.length} {ch.members.length === 1 ? 'member' : 'members'}
-                    </Text>
-                  )}
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>{channel.name}</Text>
+                    {!!channel.description ? (
+                      <Text style={{ color: theme.textMuted, marginTop: 6, lineHeight: 21 }}>
+                        {channel.description}
+                      </Text>
+                    ) : null}
+
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                      <Chip label={isPrivate ? 'Private room' : 'Public room'} icon={isPrivate ? 'lock-closed-outline' : 'globe-outline'} tone={isPrivate ? 'warning' : 'accent'} />
+                      {channel.departmentId ? <Chip label="Department linked" icon="business-outline" tone="success" /> : null}
+                      {channel.level ? <Chip label={`Level ${channel.level}`} icon="layers-outline" tone="neutral" /> : null}
+                      {channel.members?.length ? <Chip label={`${channel.members.length} members`} icon="people-outline" tone="neutral" /> : null}
+                    </View>
+                  </View>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={muted} />
-              </TouchableOpacity>
+
+                <ActionButton
+                  label="Open in Channels"
+                  icon="arrow-forward"
+                  variant="secondary"
+                  onPress={() => handleChannelPress(channel)}
+                  style={{ marginTop: 16 }}
+                />
+              </SurfaceCard>
             );
           })}
         </View>
-      </ScrollView>
-      {(user?.role === 'power' || user?.role === 'admin' || user?.role === 'd-admin') && (
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: isDark ? '#64B5F6' : '#1976D2' }]}
-          onPress={() => router.push('/create-channel' as any)}
-        >
-          <Ionicons name="add" size={22} color="#fff" />
-        </TouchableOpacity>
       )}
-    </View>
+
+      {canManageChannels ? <FloatingActionButton onPress={() => router.push('/create-channel' as any)} /> : null}
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  card: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  title: { fontSize: 20, fontWeight: '800', marginBottom: 4 },
-  subtitle: { fontSize: 14, marginBottom: 8 },
-  channelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    gap: 12,
-  },
-  channelIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  channelName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginRight: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
-  },
-});

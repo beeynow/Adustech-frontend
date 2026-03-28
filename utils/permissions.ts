@@ -10,7 +10,7 @@ export interface PermissionContext {
 }
 
 export const canPostToHome = (role?: UserRole): boolean => {
-  return role === 'power' || role === 'admin';
+  return role === 'power' || role === 'admin' || role === 'd-admin';
 };
 
 export const canPostToChannel = (context: PermissionContext): boolean => {
@@ -81,7 +81,9 @@ export const getRoleBadgeColor = (role?: UserRole): string => {
 export const getPermissionErrorMessage = (action: string, role?: UserRole): string => {
   switch (action) {
     case 'post-home':
-      return 'Only Power Admins and Admins can post to the home feed. Contact an administrator if you need posting privileges.';
+      return role === 'd-admin'
+        ? 'Department Admins can create posts, but they must target their managed department and level.'
+        : 'Only administrators can create posts. Department admins can publish department-level updates.';
     case 'post-channel':
       if (role === 'd-admin') {
         return 'As a Department Admin, you can only post to channels in your department.';

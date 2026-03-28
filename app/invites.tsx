@@ -1,28 +1,32 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView } from 'react-native';
+import {
+  EmptyState,
+  HeroCard,
+  InfoBanner,
+  ScreenShell,
+} from '@/components/ui/AppChrome';
 
 export default function InvitesScreen() {
-  const isDark = useColorScheme() === 'dark';
-  const bg = isDark ? '#0A1929' : '#E6F4FE';
-  const card = isDark ? '#0F213A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
-
   return (
-    <ScrollView style={[styles.container, { backgroundColor: bg }]}> 
-      <View style={{ padding: 16 }}>
-        <View style={[styles.card, { backgroundColor: card, borderColor: border }]}> 
-          <Text style={[styles.title, { color: textPrimary }]}>Invites</Text>
-          <Text style={{ color: muted }}>Your group and committee invites will appear here.</Text>
-        </View>
-      </View>
-    </ScrollView>
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="Invitations"
+        title="Committee and group invites"
+        subtitle="This space is ready for future membership requests, team invitations, and organization approvals."
+        icon="mail-unread-outline"
+      />
+
+      <EmptyState
+        title="No pending invites yet"
+        subtitle="When departments, clubs, or committees invite you into a new space, the invitation will show up here with clear accept and decline actions."
+        icon="people-outline"
+      />
+
+      <InfoBanner
+        message="Once invites are connected to the backend, this page can become a clean approval inbox without any structural redesign."
+        tone="info"
+        icon="sparkles-outline"
+      />
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  card: { padding: 16, borderRadius: 16, borderWidth: 1 },
-  title: { fontSize: 20, fontWeight: '800', marginBottom: 6 },
-});

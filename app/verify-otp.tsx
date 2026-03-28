@@ -18,7 +18,7 @@ const formatTime = (seconds: number) => {
 };
 
 export default function VerifyOTPScreen() {
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; debugOtp?: string; mailPreviewUrl?: string }>();
   const email = normalizeEmail(params.email || '');
   const router = useRouter();
   const { verifyOTP, resendOTP } = useAuth();
@@ -27,6 +27,8 @@ export default function VerifyOTPScreen() {
   const shakeAnimation = useRef(new Animated.Value(0)).current;
 
   const [otp, setOtp] = useState('');
+  const [debugOtp, setDebugOtp] = useState(String(params.debugOtp || '').trim());
+  const [mailPreviewUrl, setMailPreviewUrl] = useState(String(params.mailPreviewUrl || '').trim());
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [timeLeft, setTimeLeft] = useState(OTP_EXPIRY_TIME);
@@ -127,11 +129,17 @@ export default function VerifyOTPScreen() {
         return;
       }
 
+      setDebugOtp(result.debugOtp || '');
+      setMailPreviewUrl(result.mailPreviewUrl || mailPreviewUrl);
       setOtp('');
       setAttempts(0);
       setTimeLeft(OTP_EXPIRY_TIME);
       setResendCooldown(RESEND_COOLDOWN);
-      showToast.success('A fresh verification code has been sent.');
+      showToast.success(
+        result.mailPreviewUrl
+          ? 'A fresh verification code is waiting in Mailpit.'
+          : 'A fresh verification code has been sent.'
+      );
     } finally {
       setResending(false);
     }
@@ -143,20 +151,36 @@ export default function VerifyOTPScreen() {
       title="Verify your email"
       subtitle={`Enter the 6-digit code sent to ${email || 'your email address'}.`}
       helper={(
-        <View style={styles.infoRow}>
-          <View style={styles.infoItem}>
-            <Ionicons
-              name={timeLeft > 60 ? 'time-outline' : 'alert-circle-outline'}
-              size={16}
-              color={timeLeft > 60 ? colors.muted : '#D93025'}
-            />
-            <Text style={[styles.infoText, { color: timeLeft > 60 ? colors.muted : '#D93025' }]}>
-              {timeLeft > 0 ? `Expires in ${formatTime(timeLeft)}` : 'Code expired'}
-            </Text>
+        <View style={styles.helperStack}>
+          <View style={styles.infoRow}>
+            <View style={styles.infoItem}>
+              <Ionicons
+                name={timeLeft > 60 ? 'time-outline' : 'alert-circle-outline'}
+                size={16}
+                color={timeLeft > 60 ? colors.muted : '#D93025'}
+              />
+              <Text style={[styles.infoText, { color: timeLeft > 60 ? colors.muted : '#D93025' }]}>
+                {timeLeft > 0 ? `Expires in ${formatTime(timeLeft)}` : 'Code expired'}
+              </Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoText, { color: colors.muted }]}>Attempts {attempts}/5</Text>
+            </View>
           </View>
-          <View style={styles.infoItem}>
-            <Text style={[styles.infoText, { color: colors.muted }]}>Attempts {attempts}/5</Text>
-          </View>
+
+          {mailPreviewUrl || debugOtp ? (
+            <View style={[styles.devHintCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={[styles.devHintTitle, { color: colors.textPrimary }]}>Development delivery</Text>
+              {mailPreviewUrl ? (
+                <Text style={[styles.devHintText, { color: colors.muted }]}>
+                  OTP emails are landing in Mailpit: {mailPreviewUrl}
+                </Text>
+              ) : null}
+              {debugOtp ? (
+                <Text style={[styles.devHintCode, { color: colors.active }]}>Current OTP: {debugOtp}</Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       )}
       footer={(
@@ -203,7 +227,6 @@ export default function VerifyOTPScreen() {
           ) : (
             <>
               <Text style={styles.buttonText}>Verify email</Text>
-              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
             </>
           )}
         </LinearGradient>
@@ -244,6 +267,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
+  helperStack: {
+    gap: 12,
+  },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -252,6 +278,25 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  devHintCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  devHintTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  devHintText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  devHintCode: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   footerWrap: {
     alignItems: 'center',

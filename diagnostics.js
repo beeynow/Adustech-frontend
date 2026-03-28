@@ -2,8 +2,42 @@
 // This will help identify connection issues
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
-const API_URL = 'http://localhost:5000/api/auth';
+const parseEnvFile = () => {
+  const envPath = path.join(__dirname, '.env');
+  if (!fs.existsSync(envPath)) {
+    return {};
+  }
+
+  return fs.readFileSync(envPath, 'utf8')
+    .split('\n')
+    .reduce((accumulator, line) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        return accumulator;
+      }
+
+      const separatorIndex = trimmedLine.indexOf('=');
+      if (separatorIndex === -1) {
+        return accumulator;
+      }
+
+      const key = trimmedLine.slice(0, separatorIndex).trim();
+      const value = trimmedLine.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, '');
+      accumulator[key] = value;
+      return accumulator;
+    }, {});
+};
+
+const envFromFile = parseEnvFile();
+const apiBaseUrl = (
+  process.env.EXPO_PUBLIC_API_BASE_URL
+  || envFromFile.EXPO_PUBLIC_API_BASE_URL
+  || 'http://127.0.0.1:5000'
+).replace(/\/+$/, '');
+const API_URL = `${apiBaseUrl}/api/auth`;
 
 console.log('🔧 Running Diagnostics...\n');
 console.log('Testing API URL:', API_URL);
@@ -15,7 +49,7 @@ async function testRegistration() {
     const response = await axios.post(`${API_URL}/register`, {
       name: 'Test User',
       email: `test${Date.now()}@example.com`,
-      password: 'password123'
+      password: 'Password123!'
     }, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 5000
@@ -58,7 +92,7 @@ async function runTests() {
     console.log('❌ Tests failed!');
     console.log('\nTroubleshooting steps:');
     console.log('1. Check backend is running: cd backend && node app.js');
-    console.log('2. Check MongoDB is connected');
+    console.log('2. Check PostgreSQL and Mailpit containers are running');
     console.log('3. Check port 5000 is available');
   }
   console.log('==========================================\n');

@@ -10,14 +10,21 @@ interface User {
   role?: UserRole;
 }
 
+type AuthEmailResult = {
+  success: boolean;
+  message?: string;
+  debugOtp?: string;
+  mailPreviewUrl?: string;
+};
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  register: (name: string, email: string, password: string) => Promise<AuthEmailResult>;
   verifyOTP: (email: string, otp: string) => Promise<{ success: boolean; message?: string }>;
-  resendOTP: (email: string) => Promise<{ success: boolean; message?: string }>;
+  resendOTP: (email: string) => Promise<AuthEmailResult>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   resetPassword: (email: string, token: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
@@ -125,7 +132,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const result = await authAPI.register(name.trim(), normalizedEmail, password);
     if (result.success) {
       await AsyncStorage.setItem(STORAGE_KEYS.pendingEmail, normalizedEmail);
-      return { success: true, message: result.data.message };
+      return {
+        success: true,
+        message: result.data?.message,
+        debugOtp: result.data?.debug?.otp,
+        mailPreviewUrl: result.data?.delivery?.previewUrl,
+      };
     }
     return { success: false, message: result.message };
   };
@@ -143,6 +155,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resendOTP = async (email: string) => {
     const normalizedEmail = normalizeEmail(email);
     const result = await authAPI.resendOTP(normalizedEmail);
+    if (result.success) {
+      return {
+        success: true,
+        message: result.data?.message,
+        debugOtp: result.data?.debug?.otp,
+        mailPreviewUrl: result.data?.delivery?.previewUrl,
+      };
+    }
     return result;
   };
 

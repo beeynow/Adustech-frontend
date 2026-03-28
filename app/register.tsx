@@ -59,8 +59,19 @@ export default function RegisterScreen() {
         return;
       }
 
-      showToast.success('Registration complete. Check your email for the verification code.');
-      router.replace({ pathname: '/verify-otp' as any, params: { email: normalizedEmail } });
+      showToast.success(
+        result.mailPreviewUrl
+          ? 'Registration complete. OTP sent to local Mailpit for development.'
+          : 'Registration complete. Check your email for the verification code.'
+      );
+      router.replace({
+        pathname: '/verify-otp' as any,
+        params: {
+          email: normalizedEmail,
+          ...(result.debugOtp ? { debugOtp: result.debugOtp } : {}),
+          ...(result.mailPreviewUrl ? { mailPreviewUrl: result.mailPreviewUrl } : {}),
+        },
+      });
     } finally {
       setLoading(false);
     }

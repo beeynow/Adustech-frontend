@@ -12,8 +12,10 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import integratedChannelsApi from '@/services/integratedChannelsApi';
 import { showToast } from '@/utils/toast';
+import { useAppTheme } from '@/utils/theme';
 
 type ChannelData = {
   id: string;
@@ -64,6 +66,8 @@ export default function IntegratedChannelRoom({
   emptyStateTitle = 'No messages yet',
   readOnlyMessage = 'Only faculty admins can post in this room.',
 }: Props) {
+  const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -153,98 +157,149 @@ export default function IntegratedChannelRoom({
 
   if (loading) {
     return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#1452CC" />
-        <Text style={styles.loadingText}>Loading room...</Text>
+      <View style={[styles.loadingWrap, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={[styles.loadingText, { color: theme.textMuted }]}>Loading room…</Text>
       </View>
     );
   }
 
+  const scopeColor = getScopeTint(channel?.scope);
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.header}>
-        <View style={[styles.scopePill, { backgroundColor: `${getScopeTint(channel?.scope)}18` }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + 18,
+            backgroundColor: theme.backgroundMuted,
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
+        <View style={[styles.scopePill, { backgroundColor: `${scopeColor}18`, borderColor: `${scopeColor}30` }]}>
           <Ionicons
-            name={channel?.scope === 'faculty' ? 'school' : 'chatbubbles'}
+            name={channel?.scope === 'faculty' ? 'school-outline' : channel?.scope === 'department' ? 'business-outline' : channel?.scope === 'level' ? 'layers-outline' : 'chatbubbles-outline'}
             size={16}
-            color={getScopeTint(channel?.scope)}
+            color={scopeColor}
           />
-          <Text style={[styles.scopePillText, { color: getScopeTint(channel?.scope) }]}>
+          <Text style={[styles.scopePillText, { color: scopeColor }]}>
             {(channel?.scope || 'channel').toUpperCase()}
           </Text>
         </View>
 
-        <Text style={styles.title}>{channel?.name}</Text>
-        {!!channel?.description && <Text style={styles.subtitle}>{channel.description}</Text>}
+        <Text style={[styles.title, { color: theme.text }]}>{channel?.name}</Text>
+        {!!channel?.description ? (
+          <Text style={[styles.subtitle, { color: theme.textMuted }]}>{channel.description}</Text>
+        ) : null}
 
         <View style={styles.metricsRow}>
-          <Text style={styles.metricText}>{channel?.memberCount || 0} members</Text>
-          <Text style={styles.metricDivider}>•</Text>
-          <Text style={styles.metricText}>{channel?.messageCount || messages.length} messages</Text>
+          <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[styles.metricValue, { color: theme.text }]}>{channel?.memberCount || 0}</Text>
+            <Text style={[styles.metricLabel, { color: theme.textSoft }]}>Members</Text>
+          </View>
+          <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[styles.metricValue, { color: theme.text }]}>{channel?.messageCount || messages.length}</Text>
+            <Text style={[styles.metricLabel, { color: theme.textSoft }]}>Messages</Text>
+          </View>
         </View>
 
-        {!canPost && ['faculty', 'department', 'level'].includes(channel?.scope || '') && (
-          <View style={styles.noticeCard}>
-            <Ionicons name="shield-checkmark" size={16} color="#A15C00" />
-            <Text style={styles.noticeText}>{readOnlyMessage}</Text>
+        {!canPost && ['faculty', 'department', 'level'].includes(channel?.scope || '') ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.warningSoft, borderColor: `${theme.warning}30` }]}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={theme.warning} />
+            <Text style={[styles.noticeText, { color: theme.warning }]}>{readOnlyMessage}</Text>
           </View>
-        )}
+        ) : null}
 
-        {channel?.scope === 'department' && typeof channel.assignedAdminCount === 'number' && (
-          <View style={styles.noticeCard}>
-            <Ionicons name="people-circle" size={16} color="#A15C00" />
-            <Text style={styles.noticeText}>
+        {channel?.scope === 'department' && typeof channel.assignedAdminCount === 'number' ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.accentSoft, borderColor: `${theme.accent}30` }]}>
+            <Ionicons name="people-circle-outline" size={16} color={theme.accent} />
+            <Text style={[styles.noticeText, { color: theme.accent }]}>
               {`Assigned department admins: ${channel.assignedAdminCount}/${channel.requiredAdminCount || 2}`}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={messages.length === 0 ? styles.emptyListContent : styles.listContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
         renderItem={({ item }) => (
-          <View style={styles.messageCard}>
+          <View style={[styles.messageCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.messageHeader}>
-              <Text style={styles.messageAuthor}>{item.user?.name || 'Unknown user'}</Text>
-              <Text style={styles.messageMeta}>{new Date(item.createdAt).toLocaleString()}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.messageAuthor, { color: theme.text }]}>{item.user?.name || 'Unknown user'}</Text>
+                <Text style={[styles.messageMeta, { color: theme.textSoft }]}>
+                  {new Date(item.createdAt).toLocaleString()}
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.accentSoft,
+                }}
+              >
+                <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '900' }}>
+                  {(item.user?.name || 'U').charAt(0).toUpperCase()}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.messageBody}>{item.content}</Text>
+            <Text style={[styles.messageBody, { color: theme.textMuted }]}>{item.content}</Text>
           </View>
         )}
         ListEmptyComponent={(
-          <View style={styles.emptyState}>
-            <Ionicons name="sparkles-outline" size={34} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>{emptyStateTitle}</Text>
-            <Text style={styles.emptySubtitle}>Messages from this room will appear here.</Text>
+          <View style={[styles.emptyState, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={[styles.emptyIconWrap, { backgroundColor: theme.accentSoft }]}>
+              <Ionicons name="sparkles-outline" size={28} color={theme.accent} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>{emptyStateTitle}</Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
+              Messages from this room will appear here once someone starts the conversation.
+            </Text>
           </View>
         )}
       />
 
-      <View style={styles.composerWrap}>
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={canPost ? 'Share an update with this room...' : 'Read-only room'}
-          editable={canPost && !sending}
-          multiline
-          style={[styles.input, !canPost && styles.inputDisabled]}
-          placeholderTextColor="#94A3B8"
-        />
+      <View
+        style={[
+          styles.composerWrap,
+          {
+            backgroundColor: theme.surfaceStrong,
+            borderTopColor: theme.border,
+            paddingBottom: Math.max(insets.bottom, 14),
+          },
+        ]}
+      >
+        <View style={[styles.inputWrap, { backgroundColor: theme.input, borderColor: theme.border }]}>
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={canPost ? 'Share an update with this room...' : 'Read-only room'}
+            editable={canPost && !sending}
+            multiline
+            style={[styles.input, { color: theme.text }]}
+            placeholderTextColor={theme.textSoft}
+          />
+        </View>
         <TouchableOpacity
-          style={[styles.sendButton, (!canPost || sending) && styles.sendButtonDisabled]}
+          style={[styles.sendButton, { backgroundColor: canPost ? theme.accent : theme.textSoft }]}
           onPress={handleSend}
           disabled={!canPost || sending}
         >
           {sending ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Ionicons name="paper-plane" size={18} color="#FFFFFF" />
+            <Ionicons name="paper-plane-outline" size={20} color="#FFFFFF" />
           )}
         </TouchableOpacity>
       </View>
@@ -255,26 +310,21 @@ export default function IntegratedChannelRoom({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F7FB',
   },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F4F7FB',
   },
   loadingText: {
     marginTop: 12,
-    color: '#5B6B83',
     fontSize: 15,
+    fontWeight: '600',
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 56,
+    paddingHorizontal: 18,
     paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
   },
   scopePill: {
     alignSelf: 'flex-start',
@@ -284,7 +334,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    marginBottom: 12,
+    borderWidth: 1,
+    marginBottom: 14,
   },
   scopePillText: {
     fontSize: 12,
@@ -292,138 +343,140 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#10213A',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '900',
   },
   subtitle: {
     marginTop: 6,
     fontSize: 14,
     lineHeight: 21,
-    color: '#5B6B83',
+    fontWeight: '500',
   },
   metricsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
+    gap: 10,
+    marginTop: 16,
   },
-  metricText: {
-    color: '#64748B',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  metricDivider: {
-    marginHorizontal: 8,
-    color: '#94A3B8',
-  },
-  noticeCard: {
-    marginTop: 14,
+  metricCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: '#FFF4D8',
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  metricLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  noticeCard: {
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#F6D68A',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   noticeText: {
     flex: 1,
-    color: '#8A5600',
     fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
+    lineHeight: 19,
+    fontWeight: '700',
   },
   listContent: {
-    padding: 18,
+    padding: 16,
     gap: 12,
   },
   emptyListContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    padding: 16,
   },
   messageCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    padding: 16,
   },
   messageHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
-    marginBottom: 8,
   },
   messageAuthor: {
-    flex: 1,
     fontSize: 15,
-    fontWeight: '700',
-    color: '#10213A',
+    fontWeight: '900',
   },
   messageMeta: {
+    marginTop: 4,
     fontSize: 11,
-    color: '#94A3B8',
+    fontWeight: '700',
   },
   messageBody: {
-    fontSize: 15,
+    marginTop: 12,
+    fontSize: 14,
     lineHeight: 22,
-    color: '#334155',
+    fontWeight: '500',
   },
   emptyState: {
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 28,
     alignItems: 'center',
-    gap: 10,
+  },
+  emptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#10213A',
+    fontWeight: '900',
+    textAlign: 'center',
   },
   emptySubtitle: {
-    textAlign: 'center',
-    color: '#64748B',
+    marginTop: 8,
     fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
   },
   composerWrap: {
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    gap: 10,
+  },
+  inputWrap: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 56,
   },
   input: {
-    flex: 1,
-    minHeight: 52,
-    maxHeight: 120,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#D6E0EE',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
     fontSize: 15,
-    color: '#10213A',
-  },
-  inputDisabled: {
-    backgroundColor: '#EEF2F7',
-    color: '#94A3B8',
+    lineHeight: 21,
+    minHeight: 32,
+    maxHeight: 120,
   },
   sendButton: {
-    width: 52,
-    height: 52,
+    width: 54,
+    height: 54,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1452CC',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#A7B9DB',
   },
 });

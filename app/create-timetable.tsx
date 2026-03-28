@@ -1,123 +1,572 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import { timetablesAPI } from '../services/timetablesApi';
-import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'expo-router';
+import { timetablesAPI } from '@/services/timetablesApi';
+import { useAuth } from '@/context/AuthContext';
+import { showToast } from '@/utils/toast';
+import {
+  ActionButton,
+  Chip,
+  EmptyState,
+  HeroCard,
+  InfoBanner,
+  InputField,
+  ScreenShell,
+  SectionHeading,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
+
+const MAX_TITLE_LENGTH = 200;
+const MAX_DETAILS_LENGTH = 2000;
+
+const formatDisplayDate = (date: Date | null) => {
+  if (!date) {
+    return 'Pick effective date';
+  }
+
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
 
 export default function CreateTimetableScreen() {
+  const router = useRouter();
   const { user } = useAuth();
-  const isDark = useColorScheme() === 'dark';
-  const [course, setCourse] = useState('');
-  const [info, setInfo] = useState('');
+  const theme = useAppTheme();
+
+  const [title, setTitle] = useState('');
+  const [details, setDetails] = useState('');
   const [imageBase64, setImageBase64] = useState<string | undefined>();
+  const [imageLabel, setImageLabel] = useState('');
   const [pdfBase64, setPdfBase64] = useState<string | undefined>();
-  const [effectiveDate, setEffectiveDate] = useState('');
+  const [pdfLabel, setPdfLabel] = useState('');
+  const [effectiveDate, setEffectiveDate] = useState<Date | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const canCreate = !!user && ['power', 'admin'].includes(user.role || '');
+  const attachmentCount = Number(Boolean(imageBase64)) + Number(Boolean(pdfBase64));
+  const pickerDate = effectiveDate || new Date();
+
+  const publishSummary = useMemo(() => {
+    return [
+      {
+        icon: 'document-text-outline' as const,
+        label: 'Title',
+        value: title.trim() || 'Untitled timetable draft',
+      },
+      {
+        icon: 'calendar-outline' as const,
+        label: 'Effective date',
+        value: effectiveDate ? formatDisplayDate(effectiveDate) : 'Not selected yet',
+      },
+      {
+        icon: 'attach-outline' as const,
+        label: 'Attachments',
+        value: attachmentCount === 0 ? 'No attachments added' : `${attachmentCount} file${attachmentCount === 1 ? '' : 's'} attached`,
+      },
+    ];
+  }, [attachmentCount, effectiveDate, title]);
+
   const pickImage = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, base64: true, quality: 0.7 });
-    if (!res.canceled && res.assets[0].base64) {
-      setImageBase64(`data:image/jpeg;base64,${res.assets[0].base64}`);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showToast.warning('Please allow photo access to attach timetable images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        base64: true,
+        quality: 0.82,
+      });
+
+      if (!result.canceled && result.assets[0]?.base64) {
+        const asset = result.assets[0];
+        const mimeType = asset.mimeType?.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+
+        setImageBase64(`data:${mimeType};base64,${asset.base64}`);
+        setImageLabel(asset.fileName || 'Timetable cover image');
+        showToast.success('Image attached.');
+      }
+    } catch {
+      showToast.error('Unable to attach the timetable image right now.');
     }
   };
 
   const pickPdf = async () => {
-    const res = await DocumentPicker.getDocumentAsync({ type: 'application/pdf' });
-    if (res.assets && res.assets.length > 0) {
-      const asset = res.assets[0];
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      setPdfBase64(`data:application/pdf;base64,${base64}`);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+
+        setPdfBase64(`data:application/pdf;base64,${base64}`);
+        setPdfLabel(asset.name || 'Timetable PDF');
+        showToast.success('PDF attached.');
+      }
+    } catch {
+      showToast.error('Unable to attach the PDF right now.');
     }
   };
 
   const submit = async () => {
-    if (!course.trim() && !info.trim() && !imageBase64) { Alert.alert('Add content', 'Enter a course info or image'); return; }
+    if (!canCreate) {
+      showToast.error('Only power admins and admins can publish timetable updates.');
+      return;
+    }
+
+    if (!title.trim() || title.trim().length < 3) {
+      showToast.warning('Add a timetable title with at least 3 characters.');
+      return;
+    }
+
+    if (!effectiveDate) {
+      showToast.warning('Pick the effective date for this timetable.');
+      return;
+    }
+
     try {
       setSubmitting(true);
-      if (!(user && ['power','admin','d-admin'].includes(user.role || 'user'))) { setSubmitting(false); Alert.alert('Only admins', 'Only admins can create timetables.'); return; }
-      if (!effectiveDate) { setSubmitting(false); Alert.alert('Date required', 'Pick the effective date'); return; }
-      const iso = new Date(effectiveDate.replace(' ', 'T')).toISOString();
-      await timetablesAPI.create({ title: course || 'Timetable', details: info, imageBase64, pdfBase64, effectiveDate: iso });
-      Alert.alert('Posted', 'Your timetable has been posted.');
-      setCourse(''); setInfo(''); setImageBase64(undefined);
-    } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'Failed to post timetable');
-    } finally { setSubmitting(false); }
+
+      const effectiveDateIso = new Date(
+        effectiveDate.getFullYear(),
+        effectiveDate.getMonth(),
+        effectiveDate.getDate(),
+        0,
+        0,
+        0,
+        0
+      ).toISOString();
+
+      const response = await timetablesAPI.create({
+        title: title.trim(),
+        details: details.trim() || undefined,
+        imageBase64,
+        pdfBase64,
+        effectiveDate: effectiveDateIso,
+      });
+
+      showToast.success('Timetable published successfully.');
+      router.replace(`/timetable/${response.timetable.id}`);
+    } catch (error: any) {
+      showToast.error(error?.message || error?.response?.data?.message || 'Failed to post timetable');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const bg = isDark ? '#0A1929' : '#E6F4FE';
-  const card = isDark ? '#0F213A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
+  if (!canCreate) {
+    return (
+      <ScreenShell>
+        <EmptyState
+          title="Admin access required"
+          subtitle="Only power admins and admins can publish timetable updates from this page."
+          icon="lock-closed-outline"
+        />
+      </ScreenShell>
+    );
+  }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={{ padding: 16 }}>
-      <View style={[styles.card, { backgroundColor: card, borderColor: border }]}> 
-        <Text style={[styles.title, { color: textPrimary }]}>Create Timetable Post</Text>
-        <Text style={{ color: muted, marginBottom: 10 }}>Share lecture/exam schedules or updates.</Text>
-
-        <View style={[styles.inputWrap, { borderColor: border }]}>
-          <Ionicons name="book-outline" size={18} color={muted} />
-          <TextInput
-            value={course}
-            onChangeText={setCourse}
-            placeholder="Course or subject"
-            placeholderTextColor={muted}
-            style={[styles.input, { color: textPrimary }]}
+    <ScreenShell scroll keyboard edges={['top', 'bottom']}>
+      <HeroCard
+        eyebrow="Create Timetable"
+        title="Publish a polished timetable update"
+        subtitle="Use the dedicated timetable workflow to share schedules with an effective date, cleaner notes, and optional downloadable files."
+        icon="calendar-clear-outline"
+      >
+        <View style={styles.heroChips}>
+          <Chip label="Power/Admin only" icon="shield-checkmark-outline" tone="warning" />
+          <Chip label="Image + PDF support" icon="attach-outline" tone="accent" />
+          <Chip
+            label={effectiveDate ? 'Date selected' : 'Choose a date'}
+            icon="time-outline"
+            tone={effectiveDate ? 'success' : 'neutral'}
           />
         </View>
+      </HeroCard>
 
-        <View style={[styles.inputWrap, { borderColor: border }]}>
-          <Ionicons name="time-outline" size={18} color={muted} />
-          <TouchableOpacity style={{ flex: 1 }} onPress={() => setPickerVisible(true)}>
-            <Text style={{ color: effectiveDate ? textPrimary : muted }}>{effectiveDate || 'Pick effective date'}</Text>
-          </TouchableOpacity>
-        </View>
-        <DateTimePickerModal isVisible={pickerVisible} mode="date" onConfirm={(date)=>{setPickerVisible(false); const pad=(n:number)=>String(n).padStart(2,'0'); const s=`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} 00:00`; setEffectiveDate(s);}} onCancel={()=>setPickerVisible(false)} />
+      <SectionHeading
+        title="Core Details"
+        subtitle="Start with a strong title, then add the context students should see before opening any attachment."
+        action={(
+          <Text style={[styles.counterText, { color: theme.textSoft }]}>
+            {title.length}/{MAX_TITLE_LENGTH}
+          </Text>
+        )}
+      />
 
-        <View style={[styles.textAreaWrap, { borderColor: border }]}>
-          <TextInput
-            value={info}
-            onChangeText={setInfo}
-            placeholder="Details (date, time, venue, notes)"
-            placeholderTextColor={muted}
-            style={[styles.textArea, { color: textPrimary }]
-          }
-            multiline
+      <SurfaceCard>
+        <View style={styles.stackLarge}>
+          <View>
+            <Text style={[styles.fieldLabel, { color: theme.textSoft }]}>
+              Title
+            </Text>
+            <InputField
+              icon="book-outline"
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Exam timetable, lecture schedule, or course title"
+              maxLength={MAX_TITLE_LENGTH}
+              editable={!submitting}
+            />
+          </View>
+
+          <View>
+            <Text style={[styles.fieldLabel, { color: theme.textSoft }]}>
+              Effective Date
+            </Text>
+            <ActionButton
+              label={formatDisplayDate(effectiveDate)}
+              icon="calendar-outline"
+              variant="secondary"
+              onPress={() => setPickerVisible(true)}
+            />
+          </View>
+
+          <DateTimePickerModal
+            isVisible={pickerVisible}
+            mode="date"
+            date={pickerDate}
+            onConfirm={(date) => {
+              setPickerVisible(false);
+              setEffectiveDate(date);
+            }}
+            onCancel={() => setPickerVisible(false)}
           />
+
+          <View
+            style={[
+              styles.previewCard,
+              {
+                backgroundColor: theme.surfaceMuted,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View style={[styles.previewIcon, { backgroundColor: theme.accentSoft }]}>
+              <Ionicons name="calendar-outline" size={18} color={theme.accent} />
+            </View>
+            <View style={styles.previewContent}>
+              <Text style={[styles.previewTitle, { color: theme.text }]}>Schedule effective date</Text>
+              <Text style={[styles.previewSubtitle, { color: theme.textMuted }]}>
+                {effectiveDate
+                  ? `Students will see this update grouped under ${formatDisplayDate(effectiveDate)}.`
+                  : 'Choose the date this timetable becomes valid so it lands in the right day bucket.'}
+              </Text>
+            </View>
+          </View>
+
+          <View>
+            <View style={styles.rowBetween}>
+              <Text style={[styles.fieldLabel, styles.fieldLabelTight, { color: theme.textSoft }]}>
+                Details
+              </Text>
+              <Text style={[styles.counterText, { color: theme.textSoft }]}>
+                {details.length}/{MAX_DETAILS_LENGTH}
+              </Text>
+            </View>
+            <InputField
+              multiline
+              icon="document-text-outline"
+              value={details}
+              onChangeText={setDetails}
+              placeholder="Add venue, session time, exam instructions, or note what changed from the previous timetable"
+              editable={!submitting}
+              maxLength={MAX_DETAILS_LENGTH}
+            />
+          </View>
         </View>
+      </SurfaceCard>
 
-        <TouchableOpacity style={[styles.pickBtn, { borderColor: border }]} onPress={pickImage}>
-          <Ionicons name="image-outline" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
-          <Text style={{ color: isDark ? '#64B5F6' : '#1976D2', fontWeight: '700' }}>{imageBase64 ? 'Change image' : 'Add image'}</Text>
-        </TouchableOpacity>
+      <SectionHeading
+        title="Attachments"
+        subtitle="Add a quick image preview, a downloadable PDF, or both for the best student experience."
+        action={(
+          <Text style={[styles.counterText, { color: theme.textSoft }]}>
+            {attachmentCount}/2 attached
+          </Text>
+        )}
+      />
 
-        <TouchableOpacity disabled={submitting} style={[styles.submitBtn, { opacity: submitting ? 0.6 : 1 }]} onPress={submit}>
-          <Ionicons name="send" size={18} color="#FFFFFF" />
-          <Text style={styles.submitText}>{submitting ? 'Posting...' : 'Post Timetable'}</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      <SurfaceCard>
+        <View style={styles.stackLarge}>
+          <View style={styles.stackSmall}>
+            <ActionButton
+              label={imageBase64 ? 'Replace image cover' : 'Add image cover'}
+              icon="image-outline"
+              variant="secondary"
+              onPress={pickImage}
+            />
+            <ActionButton
+              label={pdfBase64 ? 'Replace PDF file' : 'Add PDF file'}
+              icon="document-outline"
+              variant="secondary"
+              onPress={pickPdf}
+            />
+          </View>
+
+          {!imageBase64 && !pdfBase64 ? (
+            <View
+              style={[
+                styles.emptyAttachmentState,
+                {
+                  backgroundColor: theme.surfaceMuted,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color={theme.textMuted} />
+              <Text style={[styles.previewSubtitle, { color: theme.textMuted }]}>
+                No attachments added yet. You can still publish a clean text-first timetable update.
+              </Text>
+            </View>
+          ) : null}
+
+          {imageBase64 ? (
+            <View
+              style={[
+                styles.attachmentCard,
+                {
+                  backgroundColor: theme.surfaceMuted,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <View style={styles.attachmentInfo}>
+                <View style={[styles.attachmentIcon, { backgroundColor: theme.accentSoft }]}>
+                  <Ionicons name="image-outline" size={16} color={theme.accent} />
+                </View>
+                <View style={styles.previewContent}>
+                  <Text style={[styles.previewTitle, { color: theme.text }]}>Image cover ready</Text>
+                  <Text style={[styles.previewSubtitle, { color: theme.textMuted }]} numberOfLines={1}>
+                    {imageLabel || 'Timetable cover image'}
+                  </Text>
+                </View>
+              </View>
+              <Pressable onPress={() => {
+                setImageBase64(undefined);
+                setImageLabel('');
+              }}>
+                <Text style={[styles.clearText, { color: theme.danger }]}>Remove</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {pdfBase64 ? (
+            <View
+              style={[
+                styles.attachmentCard,
+                {
+                  backgroundColor: theme.surfaceMuted,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <View style={styles.attachmentInfo}>
+                <View style={[styles.attachmentIcon, { backgroundColor: theme.warningSoft }]}>
+                  <Ionicons name="document-text-outline" size={16} color={theme.warning} />
+                </View>
+                <View style={styles.previewContent}>
+                  <Text style={[styles.previewTitle, { color: theme.text }]}>PDF attached</Text>
+                  <Text style={[styles.previewSubtitle, { color: theme.textMuted }]} numberOfLines={1}>
+                    {pdfLabel || 'Timetable PDF'}
+                  </Text>
+                </View>
+              </View>
+              <Pressable onPress={() => {
+                setPdfBase64(undefined);
+                setPdfLabel('');
+              }}>
+                <Text style={[styles.clearText, { color: theme.danger }]}>Remove</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </SurfaceCard>
+
+      <InfoBanner
+        message="Use the details field for fast mobile reading, then attach the PDF when students need the full official schedule."
+        tone="info"
+        icon="sparkles-outline"
+      />
+
+      <SectionHeading
+        title="Publish Check"
+        subtitle="Review the essentials before you send this timetable live."
+      />
+
+      <SurfaceCard>
+        <View style={styles.stackSmall}>
+          {publishSummary.map((item) => (
+            <View
+              key={item.label}
+              style={[
+                styles.summaryRow,
+                {
+                  backgroundColor: theme.surfaceMuted,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <View style={[styles.summaryIcon, { backgroundColor: theme.accentSoft }]}>
+                <Ionicons name={item.icon} size={16} color={theme.accent} />
+              </View>
+              <View style={styles.previewContent}>
+                <Text style={[styles.summaryLabel, { color: theme.textSoft }]}>{item.label}</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]} numberOfLines={2}>
+                  {item.value}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </SurfaceCard>
+
+      <ActionButton
+        label={submitting ? 'Publishing Timetable…' : 'Publish Timetable'}
+        icon={submitting ? undefined : 'send-outline'}
+        onPress={submit}
+        disabled={submitting}
+      />
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  card: { borderRadius: 16, borderWidth: 1, padding: 16 },
-  title: { fontSize: 20, fontWeight: '800' },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, height: 44, marginBottom: 12 },
-  input: { flex: 1 },
-  textAreaWrap: { borderWidth: 1, borderRadius: 12, padding: 10, minHeight: 120, marginBottom: 12 },
-  textArea: { flex: 1, minHeight: 100 },
-  pickBtn: { height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 12 },
-  submitBtn: { marginTop: 8, backgroundColor: '#1976D2', height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
-  submitText: { color: '#FFFFFF', fontWeight: '800' },
+  heroChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  stackLarge: {
+    gap: 16,
+  },
+  stackSmall: {
+    gap: 12,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  fieldLabelTight: {
+    marginBottom: 0,
+  },
+  counterText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  previewCard: {
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 14,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  previewIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewContent: {
+    flex: 1,
+    gap: 4,
+  },
+  previewTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  previewSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  emptyAttachmentState: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  attachmentCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  attachmentInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  attachmentIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  summaryIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
 });

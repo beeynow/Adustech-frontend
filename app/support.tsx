@@ -1,19 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import * as Linking from 'expo-linking';
+import { Linking, Text, View } from 'react-native';
+import {
+  ActionButton,
+  Chip,
+  HeroCard,
+  InfoBanner,
+  ScreenShell,
+  SectionHeading,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
+
+const SUPPORT_NUMBERS = ['+2347030158810', '+2348037769325', '+2349073471497'];
 
 export default function SupportScreen() {
-  const isDark = useColorScheme() === 'dark';
-  const bg = isDark ? '#0A1929' : '#E6F4FE';
-  const card = isDark ? '#0F213A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
+  const theme = useAppTheme();
 
   const openWhatsApp = async (number: string) => {
     const phone = number.replace(/\D/g, '');
-    // Try deep link first, then fallback to wa.me without message
+
     try {
       await Linking.openURL(`whatsapp://send?phone=${phone}`);
     } catch {
@@ -22,44 +27,71 @@ export default function SupportScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={{ padding: 16 }}> 
-      <View style={[styles.card, { backgroundColor: card, borderColor: border }]}> 
-        <Text style={[styles.title, { color: textPrimary }]}>Support</Text>
-        <Text style={{ color: muted, marginBottom: 10 }}>Get help and report issues</Text>
-
-        <Text style={{ color: textPrimary, fontWeight: '800', marginTop: 6, marginBottom: 6 }}>WhatsApp</Text>
-        <View style={styles.whatsRow}>
-          {['+2347030158810', '+2348037769325', '+2349073471497'].map(n => (
-            <TouchableOpacity key={n} style={[styles.whatsBtn, { borderColor: border }]} onPress={() => openWhatsApp(n)}>
-              <Ionicons name="logo-whatsapp" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
-              <Text style={{ marginLeft: 6, color: textPrimary, fontWeight: '700' }}>{n}</Text>
-            </TouchableOpacity>
-          ))}
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="Support"
+        title="Help that feels close by"
+        subtitle="Reach the ADUSTECH support team through the fastest channel for account issues, feedback, and platform questions."
+        icon="headset-outline"
+      >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Chip label="WhatsApp first" icon="logo-whatsapp" tone="success" />
+          <Chip label="Email support" icon="mail-outline" tone="accent" />
+          <Chip label="Phone fallback" icon="call-outline" tone="warning" />
         </View>
+      </HeroCard>
 
-        <Text style={{ color: textPrimary, fontWeight: '800', marginTop: 12, marginBottom: 6 }}>Other options</Text>
-        <TouchableOpacity style={[styles.action, { borderColor: border }]} onPress={() => (Linking.openURL('mailto:support@adustech.app'))}>
-          <Ionicons name="mail-outline" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
-          <Text style={{ marginLeft: 8, color: textPrimary, fontWeight: '700' }}>Email Support</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.action, { borderColor: border }]} onPress={() => (Linking.openURL('https://adustech.app/help'))}>
-          <Ionicons name="globe-outline" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
-          <Text style={{ marginLeft: 8, color: textPrimary, fontWeight: '700' }}>Help Center</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.action, { borderColor: border }]} onPress={() => (Linking.openURL('tel:+2347030158810'))}>
-          <Ionicons name="call-outline" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
-          <Text style={{ marginLeft: 8, color: textPrimary, fontWeight: '700' }}>Call Support</Text>
-        </TouchableOpacity>
+      <SectionHeading
+        title="Direct Contacts"
+        subtitle="Tap any number to start a WhatsApp conversation with support."
+      />
+      <View style={{ gap: 12 }}>
+        {SUPPORT_NUMBERS.map((number) => (
+          <SurfaceCard key={number}>
+            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>{number}</Text>
+            <Text style={{ color: theme.textMuted, marginTop: 6, marginBottom: 14, lineHeight: 20 }}>
+              Best for quick help with sign-in issues, posting problems, and urgent platform questions.
+            </Text>
+            <ActionButton label="Open WhatsApp" icon="logo-whatsapp" onPress={() => openWhatsApp(number)} />
+          </SurfaceCard>
+        ))}
       </View>
-    </ScrollView>
+
+      <SectionHeading
+        title="Other Channels"
+        subtitle="Use these when you want a formal report, call, or web-based help article."
+      />
+      <View style={{ gap: 12 }}>
+        <SurfaceCard>
+          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '900' }}>Email Support</Text>
+          <Text style={{ color: theme.textMuted, marginTop: 6, marginBottom: 14 }}>
+            Send account details or longer issue reports to the main support mailbox.
+          </Text>
+          <ActionButton label="Compose Email" icon="mail-outline" onPress={() => Linking.openURL('mailto:support@adustech.app')} />
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '900' }}>Help Center</Text>
+          <Text style={{ color: theme.textMuted, marginTop: 6, marginBottom: 14 }}>
+            Browse public guides and troubleshooting resources from the web support center.
+          </Text>
+          <ActionButton label="Visit Help Center" icon="globe-outline" variant="secondary" onPress={() => Linking.openURL('https://beeynow.online/help')} />
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '900' }}>Call Support</Text>
+          <Text style={{ color: theme.textMuted, marginTop: 6, marginBottom: 14 }}>
+            Use a phone call when the issue is urgent and you need human assistance quickly.
+          </Text>
+          <ActionButton label="Call Now" icon="call-outline" variant="secondary" onPress={() => Linking.openURL('tel:+2349073471497')} />
+        </SurfaceCard>
+      </View>
+
+      <InfoBanner
+        message="Support responses are fastest on WhatsApp, especially during active academic hours."
+        tone="success"
+        icon="time-outline"
+      />
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  card: { padding: 16, borderRadius: 16, borderWidth: 1 },
-  title: { fontSize: 20, fontWeight: '800', marginBottom: 6 },
-  action: { marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center' },
-  whatsRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  whatsBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent:'center' },
-});

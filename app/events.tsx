@@ -13,7 +13,7 @@ import { formatEventDate, formatEventTimeRange, getEventAdmissionLabel, getEvent
 
 type FilterValue = 'all' | 'featured' | 'free' | 'paid';
 
-const FILTERS: Array<{ label: string; value: FilterValue }> = [
+const FILTERS: { label: string; value: FilterValue }[] = [
   { label: 'All', value: 'all' },
   { label: 'Featured', value: 'featured' },
   { label: 'Free', value: 'free' },
@@ -105,10 +105,12 @@ export default function EventsScreen() {
               ) : null}
             </View>
 
-            <Text style={[styles.heroTitle, { color: palette.text }]}>Campus events that feel organized before they even begin.</Text>
-            <Text style={[styles.heroSubtitle, { color: palette.subtext }]}>
-              Discover lectures, orientations, sports, and paid ticketed experiences with clear timing, seats, and booking state.
-            </Text>
+            <View style={styles.heroHeadingBlock}>
+              <Text style={[styles.heroTitle, { color: palette.text }]}>Discover what is happening on campus.</Text>
+              <Text style={[styles.heroSubtitle, { color: palette.subtext }]}>
+                Smaller, clearer event browsing with the next highlight always in view.
+              </Text>
+            </View>
 
             <View style={styles.statRow}>
               <View style={[styles.statPill, { backgroundColor: palette.accentSoft }]}>
@@ -127,13 +129,15 @@ export default function EventsScreen() {
 
             {heroEvent ? (
               <Pressable onPress={() => router.push(`/event/${heroEvent.id}`)} style={[styles.heroHighlight, { borderColor: palette.border }]}>
-                {!!heroEvent.imageUrl ? (
-                  <Image source={{ uri: heroEvent.imageUrl }} style={styles.heroImage} contentFit="cover" />
-                ) : (
-                  <LinearGradient colors={['#1976D2', '#42A5F5']} style={styles.heroImageFallback}>
-                    <Ionicons name="calendar-outline" size={28} color="#FFFFFF" />
-                  </LinearGradient>
-                )}
+                <View style={styles.heroHighlightMedia}>
+                  {!!(heroEvent.imageUrl || heroEvent.imageBase64) ? (
+                    <Image source={{ uri: heroEvent.imageUrl || heroEvent.imageBase64 || '' }} style={styles.heroImage} contentFit="cover" />
+                  ) : (
+                    <LinearGradient colors={['#1976D2', '#42A5F5']} style={styles.heroImageFallback}>
+                      <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
+                    </LinearGradient>
+                  )}
+                </View>
                 <View style={styles.heroHighlightContent}>
                   <View style={styles.heroHighlightRow}>
                     <View style={[styles.categoryChip, { backgroundColor: palette.accentSoft }]}>
@@ -142,12 +146,17 @@ export default function EventsScreen() {
                     <Text style={[styles.countdownText, { color: palette.subtext }]}>{getEventCountdown(heroEvent.startsAt)}</Text>
                   </View>
                   <Text style={[styles.heroEventTitle, { color: palette.text }]} numberOfLines={2}>{heroEvent.title}</Text>
-                  <Text style={[styles.heroEventMeta, { color: palette.subtext }]}>
+                  <Text style={[styles.heroEventMeta, { color: palette.subtext }]} numberOfLines={1}>
                     {formatEventDate(heroEvent.startsAt)} • {formatEventTimeRange(heroEvent.startsAt, heroEvent.endsAt)}
                   </Text>
-                  <Text style={[styles.heroEventSummary, { color: palette.subtext }]} numberOfLines={2}>
-                    {heroEvent.summary || heroEvent.details || 'Event details will be shared inside the event page.'}
-                  </Text>
+                  <View style={styles.heroHighlightFooter}>
+                    <Text style={[styles.heroEventSummary, { color: palette.subtext }]} numberOfLines={1}>
+                      {heroEvent.location || getEventAdmissionLabel(heroEvent)}
+                    </Text>
+                    <View style={[styles.heroOpenPill, { backgroundColor: palette.accentSoft }]}>
+                      <Text style={[styles.heroOpenText, { color: palette.accent }]}>Open</Text>
+                    </View>
+                  </View>
                 </View>
               </Pressable>
             ) : null}
@@ -191,42 +200,105 @@ export default function EventsScreen() {
         ) : (
           filteredEvents.map((event, index) => (
             <Animated.View key={event.id} entering={FadeInDown.delay(90 + index * 35).duration(420)}>
-              <Pressable onPress={() => router.push(`/event/${event.id}`)} style={[styles.eventCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-                <View style={styles.eventCardHeader}>
-                  <View style={styles.eventCardDate}>
-                    <Text style={styles.eventDay}>{new Date(event.startsAt).getDate()}</Text>
-                    <Text style={styles.eventMonth}>{new Date(event.startsAt).toLocaleDateString([], { month: 'short' }).toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.eventCardBody}>
-                    <View style={styles.eventCardTopMeta}>
-                      <View style={[styles.inlineTag, { backgroundColor: palette.accentSoft }]}>
+              <Pressable
+                onPress={() => router.push(`/event/${event.id}`)}
+                style={[
+                  styles.eventCard,
+                  {
+                    backgroundColor: palette.card,
+                    borderColor: palette.border,
+                    shadowColor: isDark ? '#020B14' : '#9BB8D8',
+                  },
+                ]}
+              >
+                <View style={styles.eventMediaShell}>
+                  {!!(event.imageUrl || event.imageBase64) ? (
+                    <Image source={{ uri: event.imageUrl || event.imageBase64 || '' }} style={styles.eventMedia} contentFit="cover" />
+                  ) : (
+                    <LinearGradient colors={['#1976D2', '#4FC3F7']} style={styles.eventMediaFallback}>
+                      <Ionicons name="megaphone-outline" size={28} color="#FFFFFF" />
+                    </LinearGradient>
+                  )}
+                  <LinearGradient
+                    colors={isDark ? ['rgba(7,20,33,0.08)', 'rgba(7,20,33,0.82)'] : ['rgba(8,37,63,0.04)', 'rgba(8,37,63,0.62)']}
+                    style={styles.eventMediaShade}
+                  />
+
+                  <View style={styles.eventTopBar}>
+                    <View style={styles.eventTopTags}>
+                      <View style={[styles.inlineTag, { backgroundColor: 'rgba(255,255,255,0.92)' }]}>
                         <Text style={[styles.inlineTagText, { color: palette.accent }]}>{getEventCategoryLabel(event.category)}</Text>
                       </View>
                       {event.isFeatured ? (
-                        <View style={[styles.inlineTag, { backgroundColor: 'rgba(15, 157, 88, 0.12)' }]}>
-                          <Text style={[styles.inlineTagText, { color: palette.accentAlt }]}>Featured</Text>
+                        <View style={[styles.inlineTag, { backgroundColor: 'rgba(15, 157, 88, 0.92)' }]}>
+                          <Text style={[styles.inlineTagText, { color: '#FFFFFF' }]}>Featured</Text>
                         </View>
                       ) : null}
                     </View>
-                    <Text style={[styles.eventTitle, { color: palette.text }]} numberOfLines={2}>{event.title}</Text>
-                    <Text style={[styles.eventSummary, { color: palette.subtext }]} numberOfLines={2}>
-                      {event.summary || event.details || 'Event information will be available on the detail page.'}
-                    </Text>
+
+                    <View
+                      style={[
+                        styles.eventQuickAction,
+                        { backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.9)' },
+                      ]}
+                    >
+                      <Ionicons name="arrow-forward" size={16} color={isDark ? '#FFFFFF' : palette.accent} />
+                    </View>
+                  </View>
+
+                  <View style={styles.eventOverlayFooter}>
+                    <View style={styles.eventCardDate}>
+                      <Text style={styles.eventDay}>{new Date(event.startsAt).getDate()}</Text>
+                      <Text style={styles.eventMonth}>{new Date(event.startsAt).toLocaleDateString([], { month: 'short' }).toUpperCase()}</Text>
+                    </View>
+
+                    <View style={styles.eventCountdownPill}>
+                      <Ionicons name="flash-outline" size={13} color="#FFFFFF" />
+                      <Text style={styles.eventCountdownText} numberOfLines={1}>{getEventCountdown(event.startsAt)}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.eventCardBody}>
+                  <Text style={[styles.eventTitle, { color: palette.text }]} numberOfLines={2}>{event.title}</Text>
+                  <Text style={[styles.eventSummary, { color: palette.subtext }]} numberOfLines={2}>
+                    {event.summary || event.details || 'Tap to open the full event details.'}
+                  </Text>
+
+                  <View style={styles.eventMetaStack}>
                     <View style={styles.eventMetaRow}>
                       <Ionicons name="time-outline" size={15} color={palette.accent} />
-                      <Text style={[styles.eventMetaText, { color: palette.subtext }]}>
+                      <Text style={[styles.eventMetaText, { color: palette.subtext }]} numberOfLines={1}>
                         {formatEventDate(event.startsAt)} • {formatEventTimeRange(event.startsAt, event.endsAt)}
                       </Text>
                     </View>
+
                     {event.location ? (
                       <View style={styles.eventMetaRow}>
                         <Ionicons name="location-outline" size={15} color={palette.accent} />
                         <Text style={[styles.eventMetaText, { color: palette.subtext }]} numberOfLines={1}>{event.location}</Text>
                       </View>
                     ) : null}
-                    <View style={styles.eventFootRow}>
-                      <Text style={[styles.eventAdmission, { color: palette.text }]}>{getEventAdmissionLabel(event)}</Text>
-                      <Text style={[styles.eventSeatText, { color: palette.subtext }]}>{getEventSeatLabel(event)}</Text>
+                  </View>
+
+                  <View style={styles.eventBottomRow}>
+                    <View style={[styles.eventInfoPill, { backgroundColor: palette.accentSoft }]}>
+                      <Ionicons name="ticket-outline" size={14} color={palette.accent} />
+                      <Text style={[styles.eventInfoText, { color: palette.accent }]} numberOfLines={1}>
+                        {getEventAdmissionLabel(event)}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.eventInfoPill,
+                        { backgroundColor: isDark ? 'rgba(15, 157, 88, 0.18)' : 'rgba(15, 157, 88, 0.1)' },
+                      ]}
+                    >
+                      <Ionicons name="people-outline" size={14} color={palette.accentAlt} />
+                      <Text style={[styles.eventInfoText, { color: palette.accentAlt }]} numberOfLines={1}>
+                        {getEventSeatLabel(event)}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -254,13 +326,13 @@ const styles = StyleSheet.create({
   },
   heroShell: {
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 18,
+    marginBottom: 16,
   },
   heroCard: {
-    padding: 18,
-    gap: 16,
+    padding: 16,
+    gap: 14,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -268,78 +340,90 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  heroHeadingBlock: {
+    gap: 6,
+  },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderRadius: 999,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   createInlineButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
     borderRadius: 999,
   },
   createInlineText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   heroTitle: {
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '900',
   },
   heroSubtitle: {
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '500',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
   },
   statRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   statPill: {
     flex: 1,
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
   },
   statLabel: {
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: '600',
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '700',
   },
   heroHighlight: {
     borderWidth: 1,
-    borderRadius: 22,
+    borderRadius: 20,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  heroHighlightMedia: {
+    width: 92,
+    height: 96,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   heroImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
   },
   heroImageFallback: {
     width: '100%',
-    height: 180,
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroHighlightContent: {
-    padding: 16,
-    gap: 10,
+    flex: 1,
+    gap: 8,
   },
   heroHighlightRow: {
     flexDirection: 'row',
@@ -349,29 +433,49 @@ const styles = StyleSheet.create({
   },
   categoryChip: {
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 999,
   },
   categoryChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   countdownText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'right',
   },
   heroEventTitle: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: '900',
   },
   heroEventMeta: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
+  heroHighlightFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 2,
+  },
   heroEventSummary: {
-    fontSize: 14,
-    lineHeight: 20,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  heroOpenPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  heroOpenText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   filterRow: {
     flexDirection: 'row',
@@ -418,59 +522,127 @@ const styles = StyleSheet.create({
   },
   eventCard: {
     borderWidth: 1,
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 28,
+    overflow: 'hidden',
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.14,
+    shadowRadius: 28,
+    elevation: 9,
   },
-  eventCardHeader: {
+  eventMediaShell: {
+    height: 168,
+    position: 'relative',
+  },
+  eventMedia: {
+    width: '100%',
+    height: '100%',
+  },
+  eventMediaFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventMediaShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  eventTopBar: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    right: 14,
     flexDirection: 'row',
-    gap: 14,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  eventTopTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    flex: 1,
+  },
+  eventQuickAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   eventCardDate: {
-    width: 68,
+    minWidth: 58,
     borderRadius: 18,
     backgroundColor: '#1976D2',
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   eventDay: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
   },
   eventMonth: {
     color: '#DDEEFF',
     fontSize: 11,
     fontWeight: '800',
-    marginTop: 4,
+    marginTop: 2,
+  },
+  eventOverlayFooter: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   eventCardBody: {
-    flex: 1,
-    gap: 10,
-  },
-  eventCardTopMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 17,
+    gap: 12,
   },
   inlineTag: {
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 999,
   },
   inlineTagText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
+  eventCountdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '68%',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(7, 20, 33, 0.62)',
+  },
+  eventCountdownText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
   eventTitle: {
-    fontSize: 19,
+    fontSize: 18,
     lineHeight: 24,
     fontWeight: '900',
   },
   eventSummary: {
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 20,
+    fontWeight: '600',
+  },
+  eventMetaStack: {
+    gap: 8,
   },
   eventMetaRow: {
     flexDirection: 'row',
@@ -482,19 +654,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  eventFootRow: {
+  eventBottomRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 4,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 2,
   },
-  eventAdmission: {
-    fontSize: 15,
-    fontWeight: '900',
+  eventInfoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
   },
-  eventSeatText: {
-    fontSize: 13,
-    fontWeight: '700',
+  eventInfoText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   fab: {
     position: 'absolute',

@@ -1,24 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  ActionButton,
+  Chip,
+  HeroCard,
+  LoadingState,
+  ScreenShell,
+  SectionHeading,
+  SegmentedControl,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
 
 interface LeaderboardUser {
   id: number;
   name: string;
   points: number;
-  avatar?: string;
   department?: string;
-  badge?: string;
   rank: number;
-  change?: number; // Position change from last week (+1, -1, 0)
+  change?: number;
 }
 
-// Mock data - Replace with actual API call
 const MOCK_LEADERS: LeaderboardUser[] = [
-  { id: 1, name: 'Ahmed Ibrahim', points: 2850, rank: 1, department: 'Computer Science', badge: '🏆', change: 0 },
-  { id: 2, name: 'Fatima Yusuf', points: 2720, rank: 2, department: 'Engineering', badge: '🥈', change: 1 },
-  { id: 3, name: 'Usman Abdullahi', points: 2680, rank: 3, department: 'Business Admin', badge: '🥉', change: -1 },
+  { id: 1, name: 'Ahmed Ibrahim', points: 2850, rank: 1, department: 'Computer Science', change: 0 },
+  { id: 2, name: 'Fatima Yusuf', points: 2720, rank: 2, department: 'Engineering', change: 1 },
+  { id: 3, name: 'Usman Abdullahi', points: 2680, rank: 3, department: 'Business Admin', change: -1 },
   { id: 4, name: 'Aisha Mohammed', points: 2450, rank: 4, department: 'Computer Science', change: 2 },
   { id: 5, name: 'Ibrahim Sani', points: 2380, rank: 5, department: 'Engineering', change: 0 },
   { id: 6, name: 'Maryam Hassan', points: 2210, rank: 6, department: 'Sciences', change: -1 },
@@ -29,364 +36,171 @@ const MOCK_LEADERS: LeaderboardUser[] = [
 ];
 
 export default function LeadersboardScreen() {
-  const isDark = useColorScheme() === 'dark';
+  const theme = useAppTheme();
   const [leaders, setLeaders] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'dept' | 'weekly'>('all');
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setLeaders(MOCK_LEADERS);
       setLoading(false);
     }, 500);
+
+    return () => clearTimeout(timer);
   }, []);
 
-  const getRankColor = (rank: number) => {
-    if (rank === 1) return ['#FFD700', '#FFA500']; // Gold gradient
-    if (rank === 2) return ['#C0C0C0', '#A8A8A8']; // Silver gradient
-    if (rank === 3) return ['#CD7F32', '#8B4513']; // Bronze gradient
-    return isDark ? ['#1E3A5F', '#0F213A'] : ['#FFFFFF', '#F5F5F5'];
-  };
+  const filteredLeaders = useMemo(() => {
+    if (activeTab === 'weekly') {
+      return [...leaders].sort((a, b) => (b.change || 0) - (a.change || 0));
+    }
 
-  const renderTopThree = () => {
-    const top3 = leaders.slice(0, 3);
-    if (top3.length === 0) return null;
+    if (activeTab === 'dept') {
+      return leaders.filter((leader) => leader.department === 'Computer Science');
+    }
 
-    return (
-      <View style={styles.podiumContainer}>
-        {/* Second Place */}
-        {top3[1] && (
-          <View style={[styles.podiumItem, styles.secondPlace]}>
-            <LinearGradient
-              colors={getRankColor(2)}
-              style={styles.podiumCard}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.avatarContainer}>
-                <View style={[styles.avatar, styles.avatarMedium, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
-                  <Text style={styles.avatarText}>{top3[1].name.charAt(0)}</Text>
-                </View>
-                <View style={[styles.rankBadge, { backgroundColor: '#C0C0C0' }]}>
-                  <Text style={styles.rankBadgeText}>2</Text>
-                </View>
-              </View>
-              <Text style={styles.podiumName} numberOfLines={1}>{top3[1].name}</Text>
-              <Text style={styles.podiumPoints}>{top3[1].points.toLocaleString()}</Text>
-              <Text style={styles.podiumLabel}>points</Text>
-            </LinearGradient>
-          </View>
-        )}
+    return leaders;
+  }, [activeTab, leaders]);
 
-        {/* First Place */}
-        {top3[0] && (
-          <View style={[styles.podiumItem, styles.firstPlace]}>
-            <View style={styles.crownContainer}>
-              <Text style={styles.crownEmoji}>👑</Text>
-            </View>
-            <LinearGradient
-              colors={getRankColor(1)}
-              style={[styles.podiumCard, styles.podiumCardTall]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.avatarContainer}>
-                <View style={[styles.avatar, styles.avatarLarge, { backgroundColor: '#FFD700' }]}>
-                  <Text style={[styles.avatarText, { fontSize: 32 }]}>{top3[0].name.charAt(0)}</Text>
-                </View>
-                <View style={[styles.rankBadge, { backgroundColor: '#FFD700' }]}>
-                  <Text style={styles.rankBadgeText}>1</Text>
-                </View>
-              </View>
-              <Text style={[styles.podiumName, { fontSize: 16, fontWeight: '800' }]} numberOfLines={1}>{top3[0].name}</Text>
-              <Text style={[styles.podiumPoints, { fontSize: 24 }]}>{top3[0].points.toLocaleString()}</Text>
-              <Text style={styles.podiumLabel}>points</Text>
-            </LinearGradient>
-          </View>
-        )}
+  const podium = filteredLeaders.slice(0, 3);
+  const rest = filteredLeaders.slice(3);
 
-        {/* Third Place */}
-        {top3[2] && (
-          <View style={[styles.podiumItem, styles.thirdPlace]}>
-            <LinearGradient
-              colors={getRankColor(3)}
-              style={styles.podiumCard}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.avatarContainer}>
-                <View style={[styles.avatar, styles.avatarMedium, { backgroundColor: '#CD7F32' }]}>
-                  <Text style={styles.avatarText}>{top3[2].name.charAt(0)}</Text>
-                </View>
-                <View style={[styles.rankBadge, { backgroundColor: '#CD7F32' }]}>
-                  <Text style={styles.rankBadgeText}>3</Text>
-                </View>
-              </View>
-              <Text style={styles.podiumName} numberOfLines={1}>{top3[2].name}</Text>
-              <Text style={styles.podiumPoints}>{top3[2].points.toLocaleString()}</Text>
-              <Text style={styles.podiumLabel}>points</Text>
-            </LinearGradient>
-          </View>
-        )}
-      </View>
-    );
+  const getRankTone = (rank: number): 'warning' | 'neutral' | 'danger' => {
+    if (rank === 1) {
+      return 'warning';
+    }
+    if (rank === 2) {
+      return 'neutral';
+    }
+    return 'danger';
   };
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
-        <ActivityIndicator size="large" color={isDark ? '#42A5F5' : '#1976D2'} />
-      </View>
+      <ScreenShell>
+        <LoadingState label="Loading leaderboard…" />
+      </ScreenShell>
     );
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}> 
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>Leaderboard</Text>
-          <Text style={[styles.headerSubtitle, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Top performers this month</Text>
-        </View>
-        <TouchableOpacity style={[styles.infoButton, { backgroundColor: isDark ? '#1E3A5F' : '#E3F2FD' }]}>
-          <Ionicons name="information-circle-outline" size={24} color={isDark ? '#42A5F5' : '#1976D2'} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'all' && styles.tabActive,
-            { backgroundColor: activeTab === 'all' ? (isDark ? '#42A5F5' : '#1976D2') : (isDark ? '#1E3A5F' : '#FFFFFF') }
-          ]}
-          onPress={() => setActiveTab('all')}
-        >
-          <Text style={[styles.tabText, { color: activeTab === 'all' ? '#FFFFFF' : (isDark ? '#90CAF9' : '#546E7A') }]}>
-            All Time
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'dept' && styles.tabActive,
-            { backgroundColor: activeTab === 'dept' ? (isDark ? '#42A5F5' : '#1976D2') : (isDark ? '#1E3A5F' : '#FFFFFF') }
-          ]}
-          onPress={() => setActiveTab('dept')}
-        >
-          <Text style={[styles.tabText, { color: activeTab === 'dept' ? '#FFFFFF' : (isDark ? '#90CAF9' : '#546E7A') }]}>
-            Department
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'weekly' && styles.tabActive,
-            { backgroundColor: activeTab === 'weekly' ? (isDark ? '#42A5F5' : '#1976D2') : (isDark ? '#1E3A5F' : '#FFFFFF') }
-          ]}
-          onPress={() => setActiveTab('weekly')}
-        >
-          <Text style={[styles.tabText, { color: activeTab === 'weekly' ? '#FFFFFF' : (isDark ? '#90CAF9' : '#546E7A') }]}>
-            This Week
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Top 3 Podium */}
-      {renderTopThree()}
-
-      {/* Rest of Leaders */}
-      <View style={styles.listContainer}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Other Top Performers</Text>
-        {leaders.slice(3).map((user) => (
-          <View
-            key={user.id}
-            style={[
-              styles.leaderCard,
-              { 
-                backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF',
-                borderColor: isDark ? 'rgba(66,165,245,0.2)' : 'rgba(25,118,210,0.1)',
-              }
-            ]}
-          >
-            <View style={styles.leaderLeft}>
-              <Text style={[styles.leaderRank, { color: isDark ? '#90CAF9' : '#546E7A' }]}>#{user.rank}</Text>
-              <View style={[styles.avatar, styles.avatarSmall, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
-                <Text style={[styles.avatarText, { fontSize: 16 }]}>{user.name.charAt(0)}</Text>
-              </View>
-              <View style={styles.leaderInfo}>
-                <Text style={[styles.leaderName, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>{user.name}</Text>
-                <Text style={[styles.leaderDept, { color: isDark ? '#90CAF9' : '#546E7A' }]}>{user.department}</Text>
-              </View>
-            </View>
-            <View style={styles.leaderRight}>
-              {user.change !== undefined && user.change !== 0 && (
-                <View style={styles.changeIndicator}>
-                  <Ionicons 
-                    name={user.change > 0 ? 'trending-up' : 'trending-down'} 
-                    size={16} 
-                    color={user.change > 0 ? '#4CAF50' : '#F44336'} 
-                  />
-                  <Text style={[styles.changeText, { color: user.change > 0 ? '#4CAF50' : '#F44336' }]}>
-                    {Math.abs(user.change)}
-                  </Text>
-                </View>
-              )}
-              <Text style={[styles.leaderPoints, { color: isDark ? '#42A5F5' : '#1976D2' }]}>
-                {user.points.toLocaleString()}
-              </Text>
-              <Text style={[styles.pointsLabel, { color: isDark ? '#546E7A' : '#B0BEC5' }]}>points</Text>
-            </View>
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="Leaderboard"
+        title="Ranking"
+        subtitle="Top contributors, active students, and standout community members are showcased in a cleaner monthly view."
+        icon="trophy-outline"
+        actions={(
+          <View style={{ width: 108 }}>
+            <ActionButton label="How It Works" icon="information-circle-outline" variant="secondary" />
           </View>
+        )}
+      >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Chip label={`${leaders.length} ranked`} icon="people-outline" tone="accent" />
+          <Chip label="Monthly board" icon="calendar-outline" tone="success" />
+          <Chip label="Merit based" icon="star-outline" tone="warning" />
+        </View>
+      </HeroCard>
+
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { label: 'All Time', value: 'all' },
+          { label: 'Department', value: 'dept' },
+          { label: 'This Week', value: 'weekly' },
+        ]}
+      />
+
+      <SectionHeading title="Top Podium" subtitle="The highest ranked students in the current view." />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {podium.map((leader, index) => (
+          <SurfaceCard key={leader.id} style={{ flex: 1, alignItems: 'center', paddingTop: 22 }}>
+            <View
+              style={{
+                width: 58,
+                height: 58,
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: leader.rank === 1 ? theme.warningSoft : leader.rank === 2 ? theme.surfaceMuted : theme.dangerSoft,
+                marginBottom: 14,
+              }}
+            >
+              <Text style={{ color: theme.text, fontSize: 24, fontWeight: '900' }}>
+                {leader.name.charAt(0)}
+              </Text>
+            </View>
+            <Chip label={`#${leader.rank}`} icon="ribbon-outline" tone={getRankTone(leader.rank)} />
+            <Text style={{ color: theme.text, fontSize: 15, fontWeight: '900', marginTop: 14, textAlign: 'center' }} numberOfLines={2}>
+              {leader.name}
+            </Text>
+            <Text style={{ color: theme.textMuted, marginTop: 6, textAlign: 'center' }} numberOfLines={2}>
+              {leader.department}
+            </Text>
+            <Text style={{ color: theme.accent, marginTop: 10, fontSize: index === 0 ? 22 : 18, fontWeight: '900' }}>
+              {leader.points.toLocaleString()}
+            </Text>
+            <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '700' }}>points</Text>
+          </SurfaceCard>
         ))}
       </View>
 
-      {/* How to Earn Points Card */}
-      <View style={[styles.infoCard, { backgroundColor: isDark ? '#1E3A5F' : '#E3F2FD', borderColor: isDark ? 'rgba(66,165,245,0.3)' : 'rgba(25,118,210,0.2)' }]}>
-        <Ionicons name="trophy" size={24} color={isDark ? '#FFD700' : '#FFA000'} />
-        <View style={styles.infoCardContent}>
-          <Text style={[styles.infoCardTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>How to Earn Points</Text>
-          <Text style={[styles.infoCardText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-            Post quality content, engage with discussions, attend events, and help fellow students to climb the leaderboard!
-          </Text>
-        </View>
+      <SectionHeading title="Other Top Performers" subtitle="Students still climbing hard and shaping the community." />
+      <View style={{ gap: 12 }}>
+        {rest.map((leader) => (
+          <SurfaceCard key={leader.id}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.accentSoft,
+                }}
+              >
+                <Text style={{ color: theme.accent, fontSize: 18, fontWeight: '900' }}>
+                  {leader.name.charAt(0)}
+                </Text>
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '900' }}>{leader.name}</Text>
+                <Text style={{ color: theme.textMuted, marginTop: 4 }}>{leader.department}</Text>
+              </View>
+
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '800' }}>#{leader.rank}</Text>
+                <Text style={{ color: theme.accent, marginTop: 4, fontSize: 17, fontWeight: '900' }}>
+                  {leader.points.toLocaleString()}
+                </Text>
+                {(leader.change || 0) !== 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons
+                      name={(leader.change || 0) > 0 ? 'trending-up' : 'trending-down'}
+                      size={14}
+                      color={(leader.change || 0) > 0 ? theme.success : theme.danger}
+                    />
+                    <Text style={{ color: (leader.change || 0) > 0 ? theme.success : theme.danger, fontWeight: '800' }}>
+                      {Math.abs(leader.change || 0)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </SurfaceCard>
+        ))}
       </View>
-    </ScrollView>
+
+      <SurfaceCard>
+        <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>How to earn points</Text>
+        <Text style={{ color: theme.textMuted, marginTop: 8, lineHeight: 22 }}>
+          Post quality content, contribute meaningfully in channels, attend university events, and support other students to improve your standing on the board.
+        </Text>
+      </SurfaceCard>
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  centered: { justifyContent: 'center', alignItems: 'center' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-  },
-  headerTitle: { fontSize: 28, fontWeight: '800', marginBottom: 4 },
-  headerSubtitle: { fontSize: 14 },
-  infoButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 10,
-    marginBottom: 24,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  tabActive: {
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  tabText: { fontSize: 13, fontWeight: '700' },
-  podiumContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    marginBottom: 32,
-    gap: 12,
-  },
-  podiumItem: { flex: 1, alignItems: 'center' },
-  firstPlace: { zIndex: 3 },
-  secondPlace: { zIndex: 2 },
-  thirdPlace: { zIndex: 1 },
-  crownContainer: { marginBottom: -10, zIndex: 10 },
-  crownEmoji: { fontSize: 32 },
-  podiumCard: {
-    width: '100%',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  podiumCardTall: { paddingVertical: 24 },
-  avatarContainer: { position: 'relative', marginBottom: 12 },
-  avatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 100,
-  },
-  avatarSmall: { width: 40, height: 40 },
-  avatarMedium: { width: 60, height: 60 },
-  avatarLarge: { width: 80, height: 80 },
-  avatarText: { color: '#FFFFFF', fontWeight: '800', fontSize: 24 },
-  rankBadge: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  rankBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  podiumName: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
-  podiumPoints: { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
-  podiumLabel: { fontSize: 11, color: '#FFFFFFCC', marginTop: 2 },
-  listContainer: { paddingHorizontal: 20, paddingBottom: 20 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 },
-  leaderCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  leaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  leaderRank: { fontSize: 16, fontWeight: '700', width: 32 },
-  leaderInfo: { flex: 1 },
-  leaderName: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
-  leaderDept: { fontSize: 12 },
-  leaderRight: { alignItems: 'flex-end' },
-  changeIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  changeText: { fontSize: 12, fontWeight: '700' },
-  leaderPoints: { fontSize: 18, fontWeight: '800' },
-  pointsLabel: { fontSize: 11, marginTop: 2 },
-  infoCard: {
-    flexDirection: 'row',
-    gap: 16,
-    padding: 20,
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 16,
-    borderWidth: 2,
-  },
-  infoCardContent: { flex: 1 },
-  infoCardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  infoCardText: { fontSize: 13, lineHeight: 20 },
-});

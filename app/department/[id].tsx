@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import IntegratedChannelRoom from '@/components/channels/IntegratedChannelRoom';
 import integratedChannelsApi from '@/services/integratedChannelsApi';
-import { departmentsAPI, Department } from '@/services/departmentsApi';
+import { departmentsAPI, type Department } from '@/services/departmentsApi';
 import { showToast } from '@/utils/toast';
+import { useAppTheme } from '@/utils/theme';
 
 export default function DepartmentChannelScreen() {
+  const theme = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [department, setDepartment] = useState<Department | null>(null);
@@ -30,18 +33,42 @@ export default function DepartmentChannelScreen() {
   }, [id]);
 
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {department?.levelRecords?.length ? (
-        <View style={styles.levelStrip}>
-          <Text style={styles.levelStripTitle}>Department Levels</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.levelChips}>
+        <View
+          style={{
+            paddingTop: 50,
+            paddingBottom: 14,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.border,
+            backgroundColor: theme.backgroundMuted,
+          }}
+        >
+          <View style={{ paddingHorizontal: 18 }}>
+            <Text style={{ color: theme.text, fontSize: 15, fontWeight: '900' }}>Department Levels</Text>
+            <Text style={{ color: theme.textMuted, marginTop: 4, marginBottom: 12, lineHeight: 20 }}>
+              Switch directly into a level-specific room when you need narrower announcements.
+            </Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 10 }}>
             {department.levelRecords.map((level) => (
               <TouchableOpacity
                 key={level.id}
-                style={styles.levelChip}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  backgroundColor: theme.surface,
+                }}
                 onPress={() => router.push(`/level-channel/${level.id}`)}
               >
-                <Text style={styles.levelChipText}>{level.displayName}</Text>
+                <Ionicons name="layers-outline" size={16} color={theme.accent} />
+                <Text style={{ color: theme.text, fontSize: 13, fontWeight: '800' }}>{level.displayName}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -56,39 +83,3 @@ export default function DepartmentChannelScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F4F7FB',
-  },
-  levelStrip: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 52,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  levelStripTitle: {
-    paddingHorizontal: 18,
-    marginBottom: 10,
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#10213A',
-  },
-  levelChips: {
-    paddingHorizontal: 18,
-    gap: 10,
-  },
-  levelChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: '#E8F0FF',
-  },
-  levelChipText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1452CC',
-  },
-});

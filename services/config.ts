@@ -1,38 +1,55 @@
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
 
 type RuntimeEnvironment = 'development' | 'production' | 'test';
+type ExpoHostSource = {
+  hostUri?: string;
+  debuggerHost?: string;
+};
+type ExpoManifestV2 = {
+  extra?: {
+    expoClient?: ExpoHostSource;
+  };
+};
 
+const DEFAULT_DEV_PORT = 5000;
+const DEFAULT_DEV_BASE_URL = `http://127.0.0.1:${DEFAULT_DEV_PORT}`;
 const DEFAULT_PROD_BASE_URL = 'https://adustech-backend.vercel.app';
 
-const getExpoHostBaseUrl = (): string | undefined => {
-  const hostUri =
-    Constants.expoConfig?.hostUri ||
-    (Constants as any)?.manifest2?.extra?.expoClient?.hostUri ||
-    (Constants as any)?.manifest?.debuggerHost;
-
-  if (!hostUri || typeof hostUri !== 'string') {
+const extractHostFromUri = (value?: string | null): string | undefined => {
+  if (!value) {
     return undefined;
   }
 
-  const host = hostUri.split(':')[0];
-  if (!host) {
-    return undefined;
+  const trimmed = value.trim().replace(/^[a-z]+:\/\//i, '');
+  const host = trimmed.split('/')[0]?.split(':')[0]?.trim();
+  return host || undefined;
+};
+
+const getExpoHost = (): string | undefined => {
+  const expoConfig = Constants.expoConfig as ExpoHostSource | null;
+  const expoGoConfig = Constants.expoGoConfig as ExpoHostSource | null;
+  const manifest2 = Constants.manifest2 as ExpoManifestV2 | null;
+
+  const candidates = [
+    expoConfig?.hostUri,
+    expoGoConfig?.debuggerHost,
+    expoGoConfig?.hostUri,
+    manifest2?.extra?.expoClient?.hostUri,
+  ];
+
+  for (const candidate of candidates) {
+    const host = extractHostFromUri(candidate);
+    if (host) {
+      return host;
+    }
   }
 
-  return `http://${host}:5000`;
+  return undefined;
 };
 
 const getDefaultDevBaseUrl = (): string => {
-  const expoHostBaseUrl = getExpoHostBaseUrl();
-  if (expoHostBaseUrl) {
-    return expoHostBaseUrl;
-  }
-
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:5000';
-  }
-  return 'http://localhost:5000';
+  const expoHost = getExpoHost();
+  return expoHost ? `http://${expoHost}:${DEFAULT_DEV_PORT}` : DEFAULT_DEV_BASE_URL;
 };
 
 const normalizeBaseUrl = (baseUrl: string): string => {
@@ -51,7 +68,7 @@ const getRuntimeEnvironment = (): RuntimeEnvironment => {
 };
 
 const readEnvironmentBaseUrl = (): string | undefined => {
-  const fromPublicEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const fromPublicEnv = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
   if (fromPublicEnv) {
     return fromPublicEnv;
   }

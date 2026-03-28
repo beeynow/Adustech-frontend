@@ -1,65 +1,72 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Linking, Text, View } from 'react-native';
 import Constants from 'expo-constants';
+import {
+  ActionButton,
+  HeroCard,
+  ScreenShell,
+  SectionHeading,
+  SurfaceCard,
+} from '@/components/ui/AppChrome';
+import { useAppTheme } from '@/utils/theme';
 
 export default function InfoScreen() {
-  const isDark = useColorScheme() === 'dark';
-  const bg = isDark ? '#0A1929' : '#E6F4FE';
-  const card = isDark ? '#0F213A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
-
+  const theme = useAppTheme();
   const appName = Constants.expoConfig?.name || 'ADUSTECH';
   const version = Constants.expoConfig?.version || Constants.nativeAppVersion || '1.0.0';
   const build = Constants.nativeBuildVersion || '-';
 
-  return (
-    <ScrollView style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={{ padding: 16 }}> 
-      <View style={[styles.card, { backgroundColor: card, borderColor: border }]}> 
-        <Text style={[styles.title, { color: textPrimary }]}>{appName}</Text>
-        <Text style={{ color: muted, marginBottom: 10 }}>ADUSTECH community app</Text>
-        <View style={[styles.row, { borderColor: border }]}> 
-          <Text style={[styles.rowLabel, { color: muted }]}>Version</Text>
-          <Text style={[styles.rowValue, { color: textPrimary }]}>{version} ({build})</Text>
-        </View>
-        <View style={[styles.row, { borderColor: border }]}> 
-          <Text style={[styles.rowLabel, { color: muted }]}>Website</Text>
-          <Text style={[styles.rowValue, { color: isDark ? '#64B5F6' : '#1976D2' }]}>adustech.app</Text>
-        </View>
-        <View style={[styles.row, { borderColor: border }]}> 
-          <Text style={[styles.rowLabel, { color: muted }]}>Contact</Text>
-          <Text style={[styles.rowValue, { color: textPrimary }]}>support@adustech.app</Text>
-        </View>
-      </View>
+  const infoRows = [
+    { label: 'Version', value: `${version} (${build})` },
+    { label: 'Website', value: 'adustech.app' },
+    { label: 'Support', value: 'support@adustech.app' },
+  ];
 
-      <View style={[styles.card, { backgroundColor: card, borderColor: border, marginTop: 12 }]}> 
-        <Text style={[styles.title, { color: textPrimary }]}>About</Text>
-        <Text style={{ color: muted, marginTop: 6 }}>
-          This app connects the ADUSTECH community with channels, events, timetables, and updates. Built with Expo/React Native.
-        </Text>
-        <View style={{ flexDirection:'row', gap:10, marginTop: 12 }}>
-          <TouchableOpacity style={[styles.cta, { backgroundColor: isDark ? '#1E3A5F' : '#E3F2FD' }]} onPress={() => (require('expo-linking').openURL('https://adustech.app'))}>
-            <Ionicons name="globe-outline" size={16} color={isDark ? '#FFFFFF' : '#1976D2'} />
-            <Text style={{ color: isDark ? '#FFFFFF' : '#1976D2', fontWeight:'800' }}>Visit site</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.cta, { backgroundColor: isDark ? '#1E3A5F' : '#E3F2FD' }]} onPress={() => (require('expo-linking').openURL('mailto:support@adustech.app'))}>
-            <Ionicons name="mail-outline" size={16} color={isDark ? '#FFFFFF' : '#1976D2'} />
-            <Text style={{ color: isDark ? '#FFFFFF' : '#1976D2', fontWeight:'800' }}>Contact support</Text>
-          </TouchableOpacity>
+  return (
+    <ScreenShell scroll>
+      <HeroCard
+        eyebrow="About"
+        title={appName}
+        subtitle="A cleaner home for campus communication, academic updates, channels, events, and student-facing university tools."
+        icon="information-circle-outline"
+      />
+
+      <SectionHeading title="Build Details" subtitle="Current app and contact metadata." />
+      <SurfaceCard>
+        <View style={{ gap: 14 }}>
+          {infoRows.map((row) => (
+            <View
+              key={row.label}
+              style={{
+                paddingBottom: 14,
+                borderBottomWidth: row.label === infoRows[infoRows.length - 1].label ? 0 : 1,
+                borderBottomColor: theme.border,
+              }}
+            >
+              <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {row.label}
+              </Text>
+              <Text style={{ color: theme.text, marginTop: 6, fontSize: 16, fontWeight: '700' }}>{row.value}</Text>
+            </View>
+          ))}
         </View>
-      </View>
-    </ScrollView>
+      </SurfaceCard>
+
+      <SectionHeading title="Platform Summary" subtitle="What the app is built to help students and admins do well." />
+      <SurfaceCard>
+        <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>Connected university life</Text>
+        <Text style={{ color: theme.textMuted, marginTop: 8, lineHeight: 22 }}>
+          ADUSTECH brings academic notices, department rooms, events, timetables, and community updates into one mobile workspace.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+          <View style={{ flex: 1 }}>
+            <ActionButton label="Visit Site" icon="globe-outline" onPress={() => Linking.openURL('https://adustech.app')} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <ActionButton label="Contact Support" icon="mail-outline" variant="secondary" onPress={() => Linking.openURL('mailto:support@adustech.app')} />
+          </View>
+        </View>
+      </SurfaceCard>
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  card: { padding: 16, borderRadius: 16, borderWidth: 1 },
-  title: { fontSize: 20, fontWeight: '800', marginBottom: 6 },
-  row: { borderTopWidth: 1, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between' },
-  rowLabel: { fontSize: 14 },
-  rowValue: { fontSize: 14, fontWeight: '600' },
-  cta: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, flexDirection:'row', alignItems:'center', gap:6 },
-});
