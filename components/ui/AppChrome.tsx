@@ -94,7 +94,7 @@ type FloatingActionButtonProps = {
 
 type SegmentedControlProps<T extends string> = {
   value: T;
-  items: Array<{ label: string; value: T }>;
+  items: { label: string; value: T }[];
   onChange: (value: T) => void;
 };
 

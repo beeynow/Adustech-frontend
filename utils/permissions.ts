@@ -42,6 +42,10 @@ export const canManageUsers = (role?: UserRole): boolean => {
   return role === 'power';
 };
 
+export const canVerifyEventTickets = (role?: UserRole): boolean => {
+  return role === 'power' || role === 'admin';
+};
+
 export const canDeletePost = (context: PermissionContext): boolean => {
   const { role, departmentId, channelDepartmentId } = context;
 

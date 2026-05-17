@@ -163,3 +163,8 @@ The native splash screen will appear immediately on app launch, followed by the 
 ## Additional Resources
 - [Expo Splash Screen Docs](https://docs.expo.dev/develop/user-interface/splash-screen/)
 - [React Native Animated API](https://reactnative.dev/docs/animated)
+
+
+┏┓ ┏━╸┏━╸╻ ╻┏┓╻┏━┓╻ ╻
+┣┻┓┣╸ ┣╸ ┗┳┛┃┗┫┃ ┃┃╻┃
+┗━┛┗━╸┗━╸ ╹ ╹ ╹┗━┛┗┻┛

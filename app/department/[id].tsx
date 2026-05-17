@@ -3,7 +3,7 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import IntegratedChannelRoom from '@/components/channels/IntegratedChannelRoom';
-import integratedChannelsApi from '@/services/integratedChannelsApi';
+import { integratedChannelsApi } from '@/services/integratedChannelsApi';
 import { departmentsAPI, type Department } from '@/services/departmentsApi';
 import { showToast } from '@/utils/toast';
 import { useAppTheme } from '@/utils/theme';

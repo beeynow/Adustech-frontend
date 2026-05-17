@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { authAPI } from '@/services/api';
@@ -22,6 +21,8 @@ interface AdminItem {
   name: string;
   email: string;
   role: 'power' | 'admin' | 'd-admin';
+  status?: 'active' | 'pending';
+  allowlisted?: boolean;
   managedDepartment?: {
     id: string;
     name: string;
@@ -57,10 +58,15 @@ export default function AdminManagementScreen() {
       return;
     }
 
-    Alert.alert('Demote Admin', `Are you sure you want to demote ${email} to user?`, [
+    const actionLabel = role === 'pending' ? 'Remove Admin Email' : 'Demote Admin';
+    const actionMessage = role === 'pending'
+      ? `Remove ${email} from the admin allowlist?`
+      : `Are you sure you want to demote ${email} to user?`;
+
+    Alert.alert(actionLabel, actionMessage, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Demote',
+        text: role === 'pending' ? 'Remove' : 'Demote',
         style: 'destructive',
         onPress: async () => {
           const res = await authAPI.demoteAdmin(email);
@@ -111,7 +117,8 @@ export default function AdminManagementScreen() {
         )}
       >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          <Chip label={`${admins.length} admins`} icon="people-outline" tone="accent" />
+          <Chip label={`${admins.filter((admin) => admin.status !== 'pending').length} active admins`} icon="people-outline" tone="accent" />
+          <Chip label={`${admins.filter((admin) => admin.status === 'pending').length} pending emails`} icon="mail-unread-outline" tone="neutral" />
           <Chip label={`${departmentAdmins} department admins`} icon="business-outline" tone="success" />
           <Chip label="Power-only controls" icon="lock-closed-outline" tone="warning" />
         </View>
@@ -157,13 +164,18 @@ export default function AdminManagementScreen() {
 
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                      <Chip label={admin.role} icon="ribbon-outline" tone={roleTone} />
+                      <Chip label={admin.status === 'pending' ? 'pending admin email' : admin.role} icon="ribbon-outline" tone={admin.status === 'pending' ? 'neutral' : roleTone} />
+                      {admin.allowlisted && admin.status !== 'pending' ? (
+                        <Chip label="allowlisted" icon="mail-outline" tone="success" />
+                      ) : null}
                       {admin.managedDepartment?.name ? (
                         <Chip label={admin.managedDepartment.name} icon="business-outline" tone="neutral" />
                       ) : null}
                     </View>
 
-                    <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>{admin.name}</Text>
+                    <Text style={{ color: theme.text, fontSize: 17, fontWeight: '900' }}>
+                      {admin.status === 'pending' ? 'Awaiting user registration' : admin.name}
+                    </Text>
                     <Text style={{ color: theme.textMuted, marginTop: 4 }}>{admin.email}</Text>
                     {admin.createdAt ? (
                       <Text style={{ color: theme.textSoft, marginTop: 10, fontSize: 12, fontWeight: '700' }}>
@@ -175,10 +187,10 @@ export default function AdminManagementScreen() {
 
                 {admin.role !== 'power' ? (
                   <ActionButton
-                    label="Demote to user"
-                    icon="arrow-down-circle-outline"
+                    label={admin.status === 'pending' ? 'Remove email' : 'Demote to user'}
+                    icon={admin.status === 'pending' ? 'trash-outline' : 'arrow-down-circle-outline'}
                     variant="secondary"
-                    onPress={() => confirmDemote(admin.email, admin.role)}
+                    onPress={() => confirmDemote(admin.email, admin.status === 'pending' ? 'pending' : admin.role)}
                     style={{ marginTop: 16 }}
                   />
                 ) : (

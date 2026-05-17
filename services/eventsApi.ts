@@ -22,13 +22,48 @@ export type EventAudience =
 
 export type EventFormat = 'in-person' | 'virtual' | 'hybrid';
 
+export interface EventTicketPayment {
+  txRef: string;
+  provider?: string;
+  status: string;
+  flutterwaveTransactionId: string;
+  paystackTransactionId?: string;
+  gatewayTransactionId?: string;
+  checkoutUrl: string;
+  paidAt: string | null;
+  expiresAt: string | null;
+  paymentMethod: string;
+  failureReason: string;
+  gatewayResponse: string;
+  paystackSignal?: string;
+  paystackVerifiedAt?: string | null;
+  paystackWebhookReceivedAt?: string | null;
+  isExpired: boolean;
+}
+
+export interface EventTicketVerification {
+  isVerified: boolean;
+  verifiedAt: string | null;
+  verifiedByUserId: string;
+  verifiedByName: string;
+  verifiedByEmail: string;
+  method: string;
+  notes: string;
+}
+
 export interface EventTicket {
   id: string;
+  ticketId: string;
   quantity: number;
   amountCents: number;
   currency: string;
   status: string;
+  displayStatus: string;
   ticketCode: string;
+  isEntryReady: boolean;
+  qrPayload: string;
+  payment: EventTicketPayment | null;
+  verification: EventTicketVerification;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +113,10 @@ export interface EventRecord {
   isSoldOut?: boolean;
 }
 
+export interface EventPaymentConfig {
+  webhookUrl: string;
+}
+
 export interface CreateEventPayload {
   title: string;
   summary?: string;
@@ -104,6 +143,48 @@ export interface CreateEventPayload {
   timezone?: string;
 }
 
+export interface PurchaseEventTicketPayload {
+  quantity?: number;
+  redirectUrl?: string;
+}
+
+export interface PurchaseEventTicketResponse {
+  message: string;
+  event: EventRecord;
+  ticket: EventTicket;
+  requiresPayment: boolean;
+  checkoutUrl?: string;
+  txRef?: string;
+}
+
+export interface ConfirmPaystackPaymentPayload {
+  reference?: string;
+  transactionId?: string;
+  txRef?: string;
+  status?: string;
+}
+
+export interface ConfirmPaystackPaymentResponse {
+  message: string;
+  event: EventRecord;
+  ticket: EventTicket;
+  requiresPayment: boolean;
+}
+
+export interface VerifyEventTicketPayload {
+  ticketCode?: string;
+  qrPayload?: string;
+  method?: 'scanner' | 'manual';
+}
+
+export interface VerifyEventTicketResponse {
+  message: string;
+  alreadyVerified: boolean;
+  ticket: EventTicket;
+  holder: EventCreator;
+  event?: EventRecord;
+}
+
 export const eventsAPI = {
   list: async (): Promise<{ events: EventRecord[] }> => {
     const res = await api.get('/events');
@@ -113,12 +194,20 @@ export const eventsAPI = {
     const res = await api.post('/events', payload);
     return res.data;
   },
-  get: async (id: string): Promise<{ event: EventRecord }> => {
+  get: async (id: string): Promise<{ event: EventRecord; paymentConfig?: EventPaymentConfig }> => {
     const res = await api.get(`/events/${id}`);
     return res.data;
   },
-  purchase: async (id: string, payload: { quantity?: number }): Promise<{ message: string; event: EventRecord; ticket: EventTicket }> => {
+  purchase: async (id: string, payload: PurchaseEventTicketPayload): Promise<PurchaseEventTicketResponse> => {
     const res = await api.post(`/events/${id}/purchase`, payload);
+    return res.data;
+  },
+  confirmPaystackPayment: async (payload: ConfirmPaystackPaymentPayload): Promise<ConfirmPaystackPaymentResponse> => {
+    const res = await api.post('/events/payments/paystack/confirm', payload);
+    return res.data;
+  },
+  verifyTicket: async (payload: VerifyEventTicketPayload): Promise<VerifyEventTicketResponse> => {
+    const res = await api.post('/events/tickets/verify', payload);
     return res.data;
   },
 };

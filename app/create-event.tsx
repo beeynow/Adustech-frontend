@@ -9,7 +9,6 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Image } from 'expo-image';
 import { useAuth } from '../context/AuthContext';
 import { eventsAPI, type EventAudience, type EventCategory, type EventFormat } from '../services/eventsApi';
-import { postsAPI } from '../services/postsApi';
 import { showToast } from '../utils/toast';
 import { EVENT_AUDIENCE_OPTIONS, EVENT_CATEGORY_OPTIONS, EVENT_FORMAT_OPTIONS, formatEventCurrency, formatEventDateTime } from '../utils/events';
 import { isValidEmail, normalizeEmail } from '../utils/validation';
@@ -23,33 +22,6 @@ const priceStringToCents = (value: string) => {
   }
 
   return Math.round(numeric * 100);
-};
-
-const buildEventRoomPostText = (event: {
-  title: string;
-  summary: string;
-  details: string;
-  startsAt: string;
-  endsAt: string;
-  location: string;
-  streamUrl: string;
-  isFree: boolean;
-  ticketPriceCents: number;
-  currency: string;
-  ticketInstructions: string;
-}) => {
-  const sections = [
-    event.title.trim(),
-    event.summary.trim(),
-    event.details.trim(),
-    `When: ${formatEventDateTime(event.startsAt)} - ${formatEventDateTime(event.endsAt)}`,
-    event.location.trim() ? `Where: ${event.location.trim()}` : '',
-    event.streamUrl.trim() ? `Link: ${event.streamUrl.trim()}` : '',
-    `Access: ${event.isFree ? 'Free entry' : formatEventCurrency(event.ticketPriceCents, event.currency)}`,
-    event.ticketInstructions.trim() ? `Tickets: ${event.ticketInstructions.trim()}` : '',
-  ];
-
-  return sections.filter(Boolean).join('\n\n').slice(0, 1000);
 };
 
 const SelectionRow = ({
@@ -286,7 +258,7 @@ export default function CreateEventScreen() {
     try {
       setSubmitting(true);
 
-      const response = await eventsAPI.create({
+      await eventsAPI.create({
         title: title.trim(),
         summary: summary.trim(),
         details: details.trim(),
@@ -312,19 +284,7 @@ export default function CreateEventScreen() {
         timezone: 'Africa/Lagos',
       });
 
-      try {
-        await postsAPI.create({
-          text: buildEventRoomPostText(response.event),
-          imageBase64,
-          category: 'Event',
-        });
-
-        showToast.success('Event published and added to the events room.');
-      } catch (postError: any) {
-        console.warn('Event room post sync failed:', postError);
-        showToast.info('Event saved, but the events room post could not be published automatically.');
-      }
-
+      showToast.success('Event published successfully.');
       router.replace('/events');
     } catch (error: any) {
       showToast.error(error?.message || error?.response?.data?.message || 'Unable to create the event right now.');
@@ -361,15 +321,26 @@ export default function CreateEventScreen() {
               <Ionicons name="arrow-back" size={18} color={palette.accent} />
               <Text style={[styles.backText, { color: palette.accent }]}>Back</Text>
             </TouchableOpacity>
-            <Text style={[styles.heroTitle, { color: palette.text }]}>Create a structured university event</Text>
+            <Text style={[styles.heroTitle, { color: palette.text }]}>Create a polished university event</Text>
             <Text style={[styles.heroSubtitle, { color: palette.subtext }]}>
-              Publish clear dates, ticket settings, attendee limits, and contact details in one professional event experience.
+              Keep the setup concise and production-ready with clean ticketing, entry, and organizer details.
             </Text>
+            <View style={styles.heroPillRow}>
+              <View style={[styles.heroPill, { backgroundColor: palette.accentSoft }]}>
+                <Text style={[styles.heroPillText, { color: palette.accent }]}>Paystack ready</Text>
+              </View>
+              <View style={[styles.heroPill, { backgroundColor: palette.accentSoft }]}>
+                <Text style={[styles.heroPillText, { color: palette.accent }]}>QR ticket flow</Text>
+              </View>
+              <View style={[styles.heroPill, { backgroundColor: palette.accentSoft }]}>
+                <Text style={[styles.heroPillText, { color: palette.accent }]}>Cleaner event cards</Text>
+              </View>
+            </View>
           </LinearGradient>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(50).duration(420)}>
-          <SectionCard title="Overview" subtitle="Lead with a strong title and context students can scan quickly." palette={palette}>
+          <SectionCard title="Overview" subtitle="Set the headline and summary students will see first." palette={palette}>
             <TextInput
               value={title}
               onChangeText={setTitle}
@@ -412,7 +383,7 @@ export default function CreateEventScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(100).duration(420)}>
-          <SectionCard title="Schedule and venue" subtitle="Use fixed datetime pickers so the backend receives clean ISO timestamps." palette={palette}>
+          <SectionCard title="Schedule and venue" subtitle="Lock in timing, format, and where attendees should join." palette={palette}>
             <SelectionRow
               options={EVENT_FORMAT_OPTIONS}
               value={format}
@@ -459,7 +430,7 @@ export default function CreateEventScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(150).duration(420)}>
-          <SectionCard title="Tickets and access" subtitle="Free and paid events now share the same strong backend contract." palette={palette}>
+          <SectionCard title="Tickets and access" subtitle="Define price, capacity, and attendee limits without extra noise." palette={palette}>
             <View style={[styles.toggleRow, { borderColor: palette.border }]}>
               <View style={styles.toggleCopy}>
                 <Text style={[styles.toggleTitle, { color: palette.text }]}>Free event</Text>
@@ -514,7 +485,7 @@ export default function CreateEventScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(200).duration(420)}>
-          <SectionCard title="Organizer details" subtitle="These details appear on the event page for trust and support." palette={palette}>
+          <SectionCard title="Organizer details" subtitle="Add the contact identity attendees should trust for support." palette={palette}>
             <TextInput
               value={organizerName}
               onChangeText={setOrganizerName}
@@ -548,7 +519,7 @@ export default function CreateEventScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(250).duration(420)}>
-          <SectionCard title="Cover image" subtitle="Add a clean banner to make the event page feel complete." palette={palette}>
+          <SectionCard title="Cover image" subtitle="Finish with a clean banner that elevates the event presentation." palette={palette}>
             {imageBase64 ? (
               <View style={styles.imagePreviewWrap}>
                 <Image source={{ uri: imageBase64 }} style={styles.imagePreview} contentFit="cover" />
@@ -635,6 +606,20 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     fontSize: 14,
     lineHeight: 21,
+  },
+  heroPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  heroPill: {
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  heroPillText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   sectionCard: {
     borderRadius: 24,

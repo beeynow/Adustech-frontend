@@ -1,57 +1,78 @@
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
   ActionButton,
+  Chip,
   EmptyState,
   HeroCard,
   ScreenShell,
   SectionHeading,
+  SegmentedControl,
   SurfaceCard,
 } from '@/components/ui/AppChrome';
 import { useNotifications } from '@/context/NotificationsContext';
-import type { AppNotification } from '@/services/notificationsApi';
+import type { AppNotification, NotificationClassification } from '@/services/notificationsApi';
+import {
+  formatNotificationTime,
+  getNotificationPresentation,
+  getNotificationScopeLabel,
+} from '@/utils/notificationPresentation';
 import { useAppTheme } from '@/utils/theme';
 import { showToast } from '@/utils/toast';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
-const formatNotificationTime = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'Just now';
+type InboxFilter = 'all' | 'unread' | 'announcement' | 'activity' | 'system';
+
+const CLASSIFICATION_ORDER: NotificationClassification[] = [
+  'school-announcement',
+  'faculty-announcement',
+  'department-announcement',
+  'level-announcement',
+  'exam-alert',
+  'timetable-alert',
+  'event-alert',
+  'ticket-alert',
+  'discussion-comment',
+  'discussion-reply',
+  'engagement-like',
+  'engagement-comment-like',
+  'system-alert',
+];
+
+const getClassificationChipLabel = (classification: NotificationClassification) => {
+  switch (classification) {
+    case 'school-announcement':
+      return 'School';
+    case 'faculty-announcement':
+      return 'Faculty';
+    case 'department-announcement':
+      return 'Department';
+    case 'level-announcement':
+      return 'Level';
+    case 'exam-alert':
+      return 'Exams';
+    case 'timetable-alert':
+      return 'Timetables';
+    case 'event-alert':
+      return 'Events';
+    case 'ticket-alert':
+      return 'Tickets';
+    case 'discussion-comment':
+      return 'Comments';
+    case 'discussion-reply':
+      return 'Replies';
+    case 'engagement-like':
+      return 'Likes';
+    case 'engagement-comment-like':
+      return 'Comment Likes';
+    default:
+      return 'System';
   }
-
-  const diff = Date.now() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return date.toLocaleDateString();
-};
-
-const getNotificationEmoji = (notification: AppNotification) => {
-  if (notification.entityType === 'post') {
-    return '📰';
-  }
-
-  if (notification.type === 'success') {
-    return '✅';
-  }
-
-  if (notification.type === 'warning') {
-    return '⚠️';
-  }
-
-  if (notification.type === 'error') {
-    return '🚨';
-  }
-
-  return '🔔';
 };
 
 export default function NotificationsScreen() {
+  const router = useRouter();
   const theme = useAppTheme();
   const {
     notifications,
@@ -60,26 +81,86 @@ export default function NotificationsScreen() {
     markNotificationAsRead,
     markAllAsRead,
   } = useNotifications();
+  const [activeFilter, setActiveFilter] = useState<InboxFilter>('all');
+  const [activeClassification, setActiveClassification] = useState<'all' | NotificationClassification>('all');
 
-  const getTone = (type: AppNotification['type']) => {
-    if (type === 'success') {
-      return theme.success;
+  const counts = useMemo(() => ({
+    announcements: notifications.filter((notification) => notification.category === 'announcement').length,
+    activity: notifications.filter((notification) => (
+      notification.category === 'comment' || notification.category === 'engagement'
+    )).length,
+    system: notifications.filter((notification) => notification.category === 'system').length,
+    exams: notifications.filter((notification) => notification.classification === 'exam-alert').length,
+    events: notifications.filter((notification) => notification.classification === 'event-alert').length,
+    tickets: notifications.filter((notification) => notification.classification === 'ticket-alert').length,
+  }), [notifications]);
+
+  const classificationCounts = useMemo(() => {
+    const initialCounts = {} as Record<NotificationClassification, number>;
+
+    CLASSIFICATION_ORDER.forEach((classification) => {
+      initialCounts[classification] = 0;
+    });
+
+    notifications.forEach((notification) => {
+      initialCounts[notification.classification] = (initialCounts[notification.classification] || 0) + 1;
+    });
+
+    return initialCounts;
+  }, [notifications]);
+
+  const visibleClassificationFilters = useMemo(() => (
+    CLASSIFICATION_ORDER.filter((classification) => classificationCounts[classification] > 0)
+  ), [classificationCounts]);
+
+  const filteredNotifications = useMemo(() => {
+    let filtered = notifications;
+
+    if (activeFilter === 'unread') {
+      filtered = filtered.filter((notification) => !notification.read);
     }
-    if (type === 'warning') {
-      return theme.warning;
+
+    if (activeFilter === 'announcement') {
+      filtered = filtered.filter((notification) => notification.category === 'announcement');
     }
-    if (type === 'error') {
-      return theme.danger;
+
+    if (activeFilter === 'activity') {
+      filtered = filtered.filter((notification) => (
+        notification.category === 'comment' || notification.category === 'engagement'
+      ));
     }
-    return theme.accent;
+
+    if (activeFilter === 'system') {
+      filtered = filtered.filter((notification) => notification.category === 'system');
+    }
+
+    if (activeClassification !== 'all') {
+      filtered = filtered.filter((notification) => notification.classification === activeClassification);
+    }
+
+    return filtered;
+  }, [activeClassification, activeFilter, notifications]);
+
+  const handleOpenNotification = async (notification: AppNotification) => {
+    try {
+      if (!notification.read) {
+        await markNotificationAsRead(notification.id);
+      }
+
+      if (notification.actionPath) {
+        router.push(notification.actionPath as never);
+      }
+    } catch {
+      showToast.error('Unable to open that notification right now.');
+    }
   };
 
   return (
     <ScreenShell scroll>
       <HeroCard
         eyebrow="Notifications"
-        title="A cleaner inbox for campus activity"
-        subtitle="Unread items stand out more clearly, while routine updates feel calmer and easier to scan."
+        title="A smarter campus inbox"
+        subtitle="Academic updates, discussion activity, and system alerts are separated more clearly so you can act faster."
         icon="notifications-outline"
         actions={unreadCount > 0 ? (
           <View style={{ width: 132 }}>
@@ -96,75 +177,154 @@ export default function NotificationsScreen() {
           </View>
         ) : undefined}
       >
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View>
-            <Text style={{ color: theme.text, fontSize: 22, fontWeight: '900' }}>{totalCount}</Text>
-            <Text style={{ color: theme.textMuted, fontSize: 13, fontWeight: '700' }}>Total updates</Text>
-          </View>
-          <View>
-            <Text style={{ color: theme.text, fontSize: 22, fontWeight: '900' }}>{unreadCount}</Text>
-            <Text style={{ color: theme.textMuted, fontSize: 13, fontWeight: '700' }}>Unread now</Text>
-          </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Chip label={`${totalCount} total`} icon="mail-outline" tone="accent" />
+          <Chip label={`${unreadCount} unread`} icon="ellipse-outline" tone={unreadCount > 0 ? 'warning' : 'success'} />
+          <Chip label={`${counts.announcements} academic`} icon="school-outline" tone="accent" />
+          <Chip label={`${counts.activity} activity`} icon="chatbubble-ellipses-outline" tone="success" />
+          <Chip label={`${counts.exams} exams`} icon="alert-circle-outline" tone="warning" />
+          <Chip label={`${counts.events} events`} icon="ticket-outline" tone="success" />
+          <Chip label={`${counts.tickets} tickets`} icon="qr-code-outline" tone="success" />
         </View>
       </HeroCard>
 
-      <SectionHeading
-        title="Recent Activity"
-        subtitle={unreadCount > 0 ? `${unreadCount} item${unreadCount === 1 ? '' : 's'} still need your attention.` : 'You are all caught up right now.'}
+      <SegmentedControl
+        value={activeFilter}
+        onChange={setActiveFilter}
+        items={[
+          { label: 'All', value: 'all' },
+          { label: 'Unread', value: 'unread' },
+          { label: 'Academic', value: 'announcement' },
+          { label: 'Activity', value: 'activity' },
+          { label: 'System', value: 'system' },
+        ]}
       />
 
-      {notifications.length === 0 ? (
+      {visibleClassificationFilters.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+        >
+          <Pressable onPress={() => setActiveClassification('all')}>
+            <Chip
+              label="All Types"
+              icon="apps-outline"
+              tone="neutral"
+              active={activeClassification === 'all'}
+            />
+          </Pressable>
+          {visibleClassificationFilters.map((classification) => (
+            <Pressable key={classification} onPress={() => setActiveClassification(classification)}>
+              <Chip
+                label={`${getClassificationChipLabel(classification)} ${classificationCounts[classification]}`}
+                tone={
+                  classification === 'exam-alert' || classification === 'timetable-alert'
+                    ? 'warning'
+                    : classification === 'event-alert' || classification === 'ticket-alert'
+                      ? 'success'
+                      : classification === 'system-alert'
+                        ? 'danger'
+                        : 'accent'
+                }
+                active={activeClassification === classification}
+              />
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+
+      <SectionHeading
+        title="Recent Activity"
+        subtitle={
+          filteredNotifications.length > 0
+            ? `${filteredNotifications.length} item${filteredNotifications.length === 1 ? '' : 's'} in this view.`
+            : 'No notifications match this view right now.'
+        }
+      />
+
+      {filteredNotifications.length === 0 ? (
         <EmptyState
-          title="No notifications"
-          subtitle="You&apos;re all caught up. New campus alerts, messages, and reminders will appear here."
+          title="No notifications here"
+          subtitle="You&apos;re caught up for this category. New campus alerts and activity will appear here as they happen."
           icon="notifications-off-outline"
         />
       ) : (
         <View style={{ gap: 12 }}>
-          {notifications.map((notification) => (
-            <Pressable
-              key={notification.id}
-              onPress={() => {
-                void markNotificationAsRead(notification.id).catch(() => {
-                  showToast.error('Unable to update that notification right now.');
-                });
-              }}
-            >
-              <SurfaceCard style={{ borderColor: notification.read ? theme.border : theme.borderStrong }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
-                  <View
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 16,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: `${getTone(notification.type)}18`,
-                    }}
-                  >
-                    <Text style={{ fontSize: 22 }}>{getNotificationEmoji(notification)}</Text>
-                  </View>
+          {filteredNotifications.map((notification) => {
+            const presentation = getNotificationPresentation(notification, theme);
 
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <Text style={{ color: theme.text, fontSize: 16, fontWeight: notification.read ? '800' : '900', flex: 1 }}>
-                        {notification.title}
-                      </Text>
-                      {!notification.read ? (
-                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: getTone(notification.type) }} />
-                      ) : null}
+            return (
+              <Pressable
+                key={notification.id}
+                onPress={() => {
+                  void handleOpenNotification(notification);
+                }}
+              >
+                <SurfaceCard style={{ borderColor: notification.read ? theme.border : theme.borderStrong }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+                    <View
+                      style={{
+                        width: 50,
+                        height: 50,
+                        borderRadius: 18,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: presentation.soft,
+                      }}
+                    >
+                      <Ionicons name={presentation.icon} size={22} color={presentation.accent} />
                     </View>
-                    <Text style={{ color: theme.textMuted, marginTop: 8, lineHeight: 21 }}>
-                      {notification.message}
-                    </Text>
-                    <Text style={{ color: theme.textSoft, marginTop: 10, fontSize: 12, fontWeight: '700' }}>
-                      {formatNotificationTime(notification.timestamp)}
-                    </Text>
+
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <Text style={{ color: theme.text, fontSize: 16, fontWeight: notification.read ? '800' : '900', flex: 1 }}>
+                          {notification.title}
+                        </Text>
+                        {!notification.read ? (
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: presentation.accent }} />
+                        ) : null}
+                      </View>
+
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                        <Chip label={presentation.label} tone={notification.type === 'warning' ? 'warning' : notification.type === 'error' ? 'danger' : notification.category === 'engagement' ? 'success' : 'accent'} />
+                        <Chip
+                          label={getNotificationScopeLabel(notification)}
+                          tone={
+                            notification.scope === 'personal'
+                              ? 'neutral'
+                              : notification.scope === 'faculty' || notification.scope === 'department'
+                                ? 'accent'
+                                : notification.scope === 'level'
+                                  ? 'success'
+                                  : notification.scope === 'global'
+                                    ? 'accent'
+                                    : 'danger'
+                          }
+                        />
+                        {notification.actionPath ? <Chip label="Tap to open" icon="arrow-forward-outline" tone="neutral" /> : null}
+                      </View>
+
+                      <Text style={{ color: theme.textMuted, marginTop: 10, lineHeight: 21 }}>
+                        {notification.message}
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+                        <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '700' }}>
+                          {formatNotificationTime(notification.timestamp)}
+                        </Text>
+                        {notification.actor?.name ? (
+                          <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '700' }}>
+                            by {notification.actor.name}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </SurfaceCard>
-            </Pressable>
-          ))}
+                </SurfaceCard>
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </ScreenShell>

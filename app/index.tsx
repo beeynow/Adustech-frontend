@@ -26,7 +26,9 @@ export default function Index() {
     );
   }
 
-  const bgGradient = isDark ? ['#07111F', '#0D2540', '#104870'] : ['#F8FCFF', '#E6F4FF', '#D2EBFF'];
+  const bgGradient: [string, string, string] = isDark
+    ? ['#07111F', '#0D2540', '#104870']
+    : ['#F8FCFF', '#E6F4FF', '#D2EBFF'];
   const cardBg = isDark ? 'rgba(8, 24, 43, 0.88)' : 'rgba(255,255,255,0.93)';
   const border = isDark ? 'rgba(110, 180, 255, 0.18)' : 'rgba(25, 118, 210, 0.12)';
   const textPrimary = isDark ? '#F8FBFF' : '#0F172A';

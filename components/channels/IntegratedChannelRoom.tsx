@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import integratedChannelsApi from '@/services/integratedChannelsApi';
+import { integratedChannelsApi } from '@/services/integratedChannelsApi';
 import { showToast } from '@/utils/toast';
 import { useAppTheme } from '@/utils/theme';
 

@@ -1,6 +1,7 @@
 import React, { createContext, startTransition, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../services/api';
+import { unregisterCurrentDeviceForPushAsync } from '../services/pushNotifications';
 import type { UserRole } from '../utils/permissions';
 import { normalizeEmail } from '../utils/validation';
 
@@ -187,6 +188,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    try {
+      await unregisterCurrentDeviceForPushAsync();
+    } catch (error) {
+      console.warn('Failed to unregister push token during logout', error);
+    }
+
     await authAPI.logout();
     startTransition(() => setUser(null));
     await clearAuthStorage();

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, useWindowDimensions, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActionButton,
   Chip,
@@ -22,6 +23,19 @@ interface LeaderboardUser {
   change?: number;
 }
 
+type RankedLeader = LeaderboardUser & {
+  displayRank: number;
+};
+
+type PodiumVisuals = {
+  colors: [string, string];
+  badgeBg: string;
+  accent: string;
+  pedestalHeight: number;
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+};
+
 const MOCK_LEADERS: LeaderboardUser[] = [
   { id: 1, name: 'Ahmed Ibrahim', points: 2850, rank: 1, department: 'Computer Science', change: 0 },
   { id: 2, name: 'Fatima Yusuf', points: 2720, rank: 2, department: 'Engineering', change: 1 },
@@ -35,8 +49,42 @@ const MOCK_LEADERS: LeaderboardUser[] = [
   { id: 10, name: 'Zainab Ahmad', points: 1980, rank: 10, department: 'Sciences', change: -1 },
 ];
 
+const getPodiumVisuals = (rank: number): PodiumVisuals => {
+  if (rank === 1) {
+    return {
+      colors: ['#FFF6DB', '#FFD97A'],
+      badgeBg: 'rgba(255,255,255,0.8)',
+      accent: '#B7791F',
+      pedestalHeight: 116,
+      icon: 'trophy',
+      title: 'Champion',
+    };
+  }
+
+  if (rank === 2) {
+    return {
+      colors: ['#F3F7FD', '#D9E4F2'],
+      badgeBg: 'rgba(255,255,255,0.78)',
+      accent: '#5D6D7E',
+      pedestalHeight: 86,
+      icon: 'medal-outline',
+      title: 'Runner-up',
+    };
+  }
+
+  return {
+    colors: ['#FFF1E4', '#F8C89C'],
+    badgeBg: 'rgba(255,255,255,0.78)',
+    accent: '#A45D24',
+    pedestalHeight: 74,
+    icon: 'ribbon-outline',
+    title: 'Third Place',
+  };
+};
+
 export default function LeadersboardScreen() {
   const theme = useAppTheme();
+  const { width } = useWindowDimensions();
   const [leaders, setLeaders] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'dept' | 'weekly'>('all');
@@ -62,18 +110,17 @@ export default function LeadersboardScreen() {
     return leaders;
   }, [activeTab, leaders]);
 
-  const podium = filteredLeaders.slice(0, 3);
-  const rest = filteredLeaders.slice(3);
+  const rankedLeaders = useMemo<RankedLeader[]>(() => (
+    filteredLeaders.map((leader, index) => ({
+      ...leader,
+      displayRank: index + 1,
+    }))
+  ), [filteredLeaders]);
 
-  const getRankTone = (rank: number): 'warning' | 'neutral' | 'danger' => {
-    if (rank === 1) {
-      return 'warning';
-    }
-    if (rank === 2) {
-      return 'neutral';
-    }
-    return 'danger';
-  };
+  const podiumLeaders = rankedLeaders.slice(0, 3);
+  const podium = [podiumLeaders[1], podiumLeaders[0], podiumLeaders[2]].filter(Boolean) as RankedLeader[];
+  const rest = rankedLeaders.slice(3);
+  const cardWidth = Math.max(92, Math.min(134, (width - 60) / 3));
 
   if (loading) {
     return (
@@ -88,7 +135,7 @@ export default function LeadersboardScreen() {
       <HeroCard
         eyebrow="Leaderboard"
         title="Ranking"
-        subtitle="Top contributors, active students, and standout community members are showcased in a cleaner monthly view."
+        subtitle="Top contributors, standout students, and fast climbers are showcased in a stronger, more editorial monthly board."
         icon="trophy-outline"
         actions={(
           <View style={{ width: 108 }}>
@@ -98,7 +145,7 @@ export default function LeadersboardScreen() {
       >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           <Chip label={`${leaders.length} ranked`} icon="people-outline" tone="accent" />
-          <Chip label="Monthly board" icon="calendar-outline" tone="success" />
+          <Chip label={activeTab === 'weekly' ? 'Weekly movers' : activeTab === 'dept' ? 'Department board' : 'Monthly board'} icon="stats-chart-outline" tone="success" />
           <Chip label="Merit based" icon="star-outline" tone="warning" />
         </View>
       </HeroCard>
@@ -113,38 +160,164 @@ export default function LeadersboardScreen() {
         ]}
       />
 
-      <SectionHeading title="Top Podium" subtitle="The highest ranked students in the current view." />
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        {podium.map((leader, index) => (
-          <SurfaceCard key={leader.id} style={{ flex: 1, alignItems: 'center', paddingTop: 22 }}>
+      <SectionHeading title="Top Podium" subtitle="A clearer 1 to 3 finish with stronger visual hierarchy." />
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        {podium.map((leader) => {
+          const visuals = getPodiumVisuals(leader.displayRank);
+          const isChampion = leader.displayRank === 1;
+
+          return (
             <View
+              key={leader.id}
               style={{
-                width: 58,
-                height: 58,
-                borderRadius: 20,
+                width: cardWidth,
                 alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: leader.rank === 1 ? theme.warningSoft : leader.rank === 2 ? theme.surfaceMuted : theme.dangerSoft,
-                marginBottom: 14,
               }}
             >
-              <Text style={{ color: theme.text, fontSize: 24, fontWeight: '900' }}>
-                {leader.name.charAt(0)}
-              </Text>
+              <LinearGradient
+                colors={visuals.colors}
+                style={{
+                  width: '100%',
+                  borderRadius: 26,
+                  paddingHorizontal: 12,
+                  paddingTop: isChampion ? 18 : 14,
+                  paddingBottom: 14,
+                  borderWidth: 1,
+                  borderColor: isChampion ? 'rgba(183,121,31,0.22)' : theme.border,
+                  shadowColor: theme.shadow,
+                  shadowOffset: { width: 0, height: 14 },
+                  shadowOpacity: isChampion ? 0.16 : 0.1,
+                  shadowRadius: 24,
+                  elevation: isChampion ? 10 : 6,
+                }}
+              >
+                <View style={{ alignItems: 'center' }}>
+                  <View
+                    style={{
+                      width: isChampion ? 66 : 58,
+                      height: isChampion ? 66 : 58,
+                      borderRadius: isChampion ? 24 : 20,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: visuals.badgeBg,
+                    }}
+                  >
+                    <Text style={{ color: visuals.accent, fontSize: isChampion ? 28 : 24, fontWeight: '900' }}>
+                      {leader.name.charAt(0)}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      marginTop: 12,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      backgroundColor: visuals.badgeBg,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons name={visuals.icon} size={14} color={visuals.accent} />
+                    <Text style={{ color: visuals.accent, fontSize: 11, fontWeight: '900' }}>
+                      #{leader.displayRank}
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={{
+                      marginTop: 12,
+                      color: '#10263C',
+                      fontSize: isChampion ? 16 : 14,
+                      fontWeight: '900',
+                      textAlign: 'center',
+                    }}
+                    numberOfLines={2}
+                  >
+                    {leader.name}
+                  </Text>
+
+                  <Text
+                    style={{
+                      marginTop: 4,
+                      color: '#5A7188',
+                      fontSize: 12,
+                      fontWeight: '700',
+                      textAlign: 'center',
+                    }}
+                    numberOfLines={2}
+                  >
+                    {leader.department}
+                  </Text>
+
+                  <Text
+                    style={{
+                      marginTop: 12,
+                      color: visuals.accent,
+                      fontSize: isChampion ? 24 : 20,
+                      fontWeight: '900',
+                    }}
+                  >
+                    {leader.points.toLocaleString()}
+                  </Text>
+                  <Text style={{ color: '#6E7F91', fontSize: 11, fontWeight: '800' }}>points</Text>
+
+                  <View
+                    style={{
+                      marginTop: 10,
+                      minHeight: 26,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    {(leader.change || 0) !== 0 ? (
+                      <>
+                        <Ionicons
+                          name={(leader.change || 0) > 0 ? 'trending-up' : 'trending-down'}
+                          size={14}
+                          color={(leader.change || 0) > 0 ? theme.success : theme.danger}
+                        />
+                        <Text style={{ color: (leader.change || 0) > 0 ? theme.success : theme.danger, fontSize: 12, fontWeight: '800' }}>
+                          {Math.abs(leader.change || 0)} this view
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={{ color: '#6E7F91', fontSize: 12, fontWeight: '800' }}>{visuals.title}</Text>
+                    )}
+                  </View>
+                </View>
+              </LinearGradient>
+
+              <View
+                style={{
+                  width: '88%',
+                  height: visuals.pedestalHeight,
+                  marginTop: 10,
+                  borderTopLeftRadius: 18,
+                  borderTopRightRadius: 18,
+                  backgroundColor: theme.surface,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: theme.text, fontSize: isChampion ? 24 : 20, fontWeight: '900' }}>
+                  {leader.displayRank}
+                </Text>
+              </View>
             </View>
-            <Chip label={`#${leader.rank}`} icon="ribbon-outline" tone={getRankTone(leader.rank)} />
-            <Text style={{ color: theme.text, fontSize: 15, fontWeight: '900', marginTop: 14, textAlign: 'center' }} numberOfLines={2}>
-              {leader.name}
-            </Text>
-            <Text style={{ color: theme.textMuted, marginTop: 6, textAlign: 'center' }} numberOfLines={2}>
-              {leader.department}
-            </Text>
-            <Text style={{ color: theme.accent, marginTop: 10, fontSize: index === 0 ? 22 : 18, fontWeight: '900' }}>
-              {leader.points.toLocaleString()}
-            </Text>
-            <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '700' }}>points</Text>
-          </SurfaceCard>
-        ))}
+          );
+        })}
       </View>
 
       <SectionHeading title="Other Top Performers" subtitle="Students still climbing hard and shaping the community." />
@@ -173,7 +346,7 @@ export default function LeadersboardScreen() {
               </View>
 
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '800' }}>#{leader.rank}</Text>
+                <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '800' }}>#{leader.displayRank}</Text>
                 <Text style={{ color: theme.accent, marginTop: 4, fontSize: 17, fontWeight: '900' }}>
                   {leader.points.toLocaleString()}
                 </Text>

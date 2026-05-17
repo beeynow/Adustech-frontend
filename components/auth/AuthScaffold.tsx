@@ -23,7 +23,7 @@ export function AuthScaffold({
 }: AuthScaffoldProps) {
   const isDark = useColorScheme() === 'dark';
 
-  const bgGradient = isDark
+  const bgGradient: [string, string, string] = isDark
     ? ['#07111F', '#0C2540', '#0E3A5D']
     : ['#F7FBFF', '#E9F5FF', '#D5EBFF'];
 

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { cacheDirectory, downloadAsync } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Linking from 'expo-linking';
 import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -97,7 +97,7 @@ export default function PostDetail() {
         return;
       }
 
-      if (!cacheDirectory) {
+      if (!FileSystem.cacheDirectory) {
         Alert.alert('Error', 'File storage is not available on this device right now.');
         return;
       }
@@ -109,8 +109,8 @@ export default function PostDetail() {
       }
 
       const fileName = `post_${id}_${Date.now()}.jpg`;
-      const fileUri = `${cacheDirectory}${fileName}`;
-      const download = await downloadAsync(post.imageUrl, fileUri);
+      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+      const download = await FileSystem.downloadAsync(post.imageUrl, fileUri);
       const asset = await MediaLibrary.createAssetAsync(download.uri);
 
       await MediaLibrary.createAlbumAsync('ADUSTECH', asset, false).catch(async () => {

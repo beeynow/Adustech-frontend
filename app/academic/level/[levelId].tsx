@@ -6,7 +6,7 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,185 +15,199 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Alert
+  Alert,
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '@/context/AuthContext';
-import academicApi from '@/services/academicApi';
+import { useAuth } from '@/context/AuthContext';
+import { academicApi, AcademicPostRecord, LevelRecord } from '@/services/academicApi';
+import { showToast } from '@/utils/toast';
+
+const normalizeRole = (role?: string) => role?.trim().toLowerCase().replace(/_/g, '-') || '';
+
+const getPriorityColor = (priority?: string) => {
+  switch (priority) {
+    case 'urgent':
+      return '#d32f2f';
+    case 'high':
+      return '#f57c00';
+    case 'low':
+      return '#388e3c';
+    default:
+      return '#1976d2';
+  }
+};
 
 export default function LevelPostsPage() {
-  const { levelId } = useLocalSearchParams();
-  const { user } = useContext(AuthContext);
+  const params = useLocalSearchParams<{ levelId?: string | string[] }>();
+  const router = useRouter();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [posts, setPosts] = useState<any[]>([]);
-  const [level, setLevel] = useState<any>(null);
+  const [posts, setPosts] = useState<AcademicPostRecord[]>([]);
+  const [level, setLevel] = useState<LevelRecord | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const canPost = ['admin', 'power_admin', 'd_admin'].includes(user?.role || '');
+  const levelId = useMemo(
+    () => (Array.isArray(params.levelId) ? params.levelId[0] : params.levelId),
+    [params.levelId]
+  );
 
-  useEffect(() => {
-    loadLevelData();
-  }, [levelId]);
+  const canPost = ['admin', 'power', 'd-admin'].includes(normalizeRole(user?.role));
 
-  const loadLevelData = async () => {
+  const loadLevelData = useCallback(async (pageToLoad = 1) => {
+    if (!levelId) {
+      setLevel(null);
+      setPosts([]);
+      setLoading(false);
+      return;
+    }
+
     try {
-      setLoading(true);
+      if (pageToLoad === 1) {
+        setLoading(true);
+      }
 
-      // Load level info and posts
       const [levelData, postsData] = await Promise.all([
-        academicApi.getLevel(levelId as string),
-        academicApi.getLevelPosts(levelId as string, { page: 1, limit: 20 })
+        pageToLoad === 1 ? academicApi.getLevel(levelId) : Promise.resolve(null),
+        academicApi.getLevelPosts(levelId, { page: pageToLoad, limit: 20 }),
       ]);
 
-      setLevel(levelData.level);
-      setPosts(postsData.posts || []);
-      setHasMore(postsData.pagination?.hasMore || false);
+      if (levelData?.level) {
+        setLevel(levelData.level);
+      }
 
+      setPosts((currentPosts) => (
+        pageToLoad === 1
+          ? (postsData.posts || [])
+          : [...currentPosts, ...(postsData.posts || [])]
+      ));
+      setPage(pageToLoad);
+      setHasMore(postsData.pagination?.hasMore || false);
     } catch (error: any) {
-      console.error('Error loading level data:', error);
-      if (error.response?.status === 403) {
+      if (error?.response?.status === 403) {
         Alert.alert(
           'Access Denied',
           'You can only view posts from your department level.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
+      } else {
+        showToast.error(error?.message || 'Unable to load this level room right now.');
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [levelId, router]);
+
+  useEffect(() => {
+    void loadLevelData(1);
+  }, [loadLevelData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    setPage(1);
-    await loadLevelData();
+    await loadLevelData(1);
     setRefreshing(false);
   };
 
   const loadMore = async () => {
-    if (!hasMore || loading) return;
-
-    try {
-      const nextPage = page + 1;
-      const postsData = await academicApi.getLevelPosts(levelId as string, {
-        page: nextPage,
-        limit: 20
-      });
-
-      setPosts([...posts, ...(postsData.posts || [])]);
-      setPage(nextPage);
-      setHasMore(postsData.pagination?.hasMore || false);
-    } catch (error) {
-      console.error('Error loading more posts:', error);
+    if (!levelId || !hasMore || loading) {
+      return;
     }
+
+    await loadLevelData(page + 1);
   };
 
   const handleLikePost = async (postId: string) => {
     try {
       const result = await academicApi.likePost(postId);
-      
-      // Update post in list
-      setPosts(posts.map(post =>
+
+      setPosts((currentPosts) => currentPosts.map((post) => (
         post.id === postId
           ? { ...post, isLiked: result.isLiked, likesCount: result.likesCount }
           : post
-      ));
-    } catch (error) {
-      console.error('Error liking post:', error);
-      Alert.alert('Error', 'Failed to like post');
+      )));
+    } catch {
+      showToast.error('Failed to like post.');
     }
   };
 
-  const renderPost = ({ item }: { item: any }) => (
+  const renderPost = ({ item }: { item: AcademicPostRecord }) => (
     <TouchableOpacity
       style={styles.postCard}
-      onPress={() => router.push(`/post/${item.id}`)}
+      onPress={() => router.push({
+        pathname: '/post/[id]',
+        params: { id: item.id },
+      })}
     >
-      {/* Priority Badge */}
-      {item.priority !== 'normal' && (
+      {item.priority && item.priority !== 'normal' ? (
         <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
           <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
         </View>
-      )}
+      ) : null}
 
-      {/* Pinned Indicator */}
-      {item.isPinned && (
+      {item.isPinned ? (
         <View style={styles.pinnedBadge}>
           <Ionicons name="pin" size={16} color="#fff" />
           <Text style={styles.pinnedText}>PINNED</Text>
         </View>
-      )}
+      ) : null}
 
-      {/* Author Info */}
       <View style={styles.postHeader}>
         <View style={styles.authorInfo}>
           <Ionicons name="person-circle" size={40} color="#1e88e5" />
           <View style={styles.authorDetails}>
-            <Text style={styles.authorName}>{item.author.fullName}</Text>
-            <Text style={styles.authorRole}>{item.author.role}</Text>
+            <Text style={styles.authorName}>{item.author?.fullName || item.author?.name || 'Unknown'}</Text>
+            <Text style={styles.authorRole}>{item.author?.role || 'user'}</Text>
           </View>
         </View>
         <Text style={styles.timestamp}>
-          {new Date(item.createdAt).toLocaleDateString()}
+          {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Recently'}
         </Text>
       </View>
 
-      {/* Title */}
-      {item.title && (
+      {item.title ? (
         <Text style={styles.postTitle}>{item.title}</Text>
-      )}
+      ) : null}
 
-      {/* Content */}
       <Text style={styles.postContent} numberOfLines={4}>
-        {item.content}
+        {item.content || item.text || 'No content available.'}
       </Text>
 
-      {/* Image */}
-      {item.imageUrl && (
+      {item.imageUrl || item.image_url ? (
         <View style={styles.imageContainer}>
           <Ionicons name="image" size={24} color="#666" />
           <Text style={styles.imageText}>Image attached</Text>
         </View>
-      )}
+      ) : null}
 
-      {/* Engagement Stats */}
       <View style={styles.engagementBar}>
         <TouchableOpacity
           style={styles.engagementButton}
-          onPress={() => handleLikePost(item.id)}
+          onPress={() => {
+            void handleLikePost(item.id);
+          }}
         >
           <Ionicons
-            name={item.isLiked ? "heart" : "heart-outline"}
+            name={item.isLiked ? 'heart' : 'heart-outline'}
             size={20}
-            color={item.isLiked ? "#e91e63" : "#666"}
+            color={item.isLiked ? '#e91e63' : '#666'}
           />
-          <Text style={styles.engagementText}>{item.likesCount}</Text>
+          <Text style={styles.engagementText}>{item.likesCount || 0}</Text>
         </TouchableOpacity>
 
         <View style={styles.engagementButton}>
           <Ionicons name="chatbubble-outline" size={20} color="#666" />
-          <Text style={styles.engagementText}>{item.commentsCount}</Text>
+          <Text style={styles.engagementText}>{item.commentsCount || 0}</Text>
         </View>
 
         <View style={styles.engagementButton}>
           <Ionicons name="eye-outline" size={20} color="#666" />
-          <Text style={styles.engagementText}>{item.viewsCount}</Text>
+          <Text style={styles.engagementText}>{item.viewsCount || 0}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return '#d32f2f';
-      case 'high': return '#f57c00';
-      case 'low': return '#388e3c';
-      default: return '#1976d2';
-    }
-  };
 
   if (loading) {
     return (
@@ -206,8 +220,7 @@ export default function LevelPostsPage() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      {level && (
+      {level ? (
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -215,30 +228,28 @@ export default function LevelPostsPage() {
           <View style={styles.headerInfo}>
             <Text style={styles.headerTitle}>{level.displayName}</Text>
             <Text style={styles.headerSubtitle}>
-              {level.department.name} ({level.department.code})
+              {level.department?.name} ({level.department?.code})
             </Text>
             <Text style={styles.headerFaculty}>
-              {level.department.faculty.name}
+              {level.department?.faculty?.name || 'Academic room'}
             </Text>
           </View>
         </View>
-      )}
+      ) : null}
 
-      {/* Create Post Button */}
-      {canPost && (
+      {canPost && levelId ? (
         <TouchableOpacity
           style={styles.createButton}
           onPress={() => router.push({
             pathname: '/create-academic-post',
-            params: { levelId }
-          })}
+            params: { levelId },
+          } as never)}
         >
           <Ionicons name="add-circle" size={24} color="#fff" />
           <Text style={styles.createButtonText}>Create Post</Text>
         </TouchableOpacity>
-      )}
+      ) : null}
 
-      {/* Posts List */}
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -246,15 +257,17 @@ export default function LevelPostsPage() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        onEndReached={loadMore}
+        onEndReached={() => {
+          void loadMore();
+        }}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="document-text-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>No posts yet in this level</Text>
-            {canPost && (
+            {canPost ? (
               <Text style={styles.emptySubtext}>Be the first to post!</Text>
-            )}
+            ) : null}
           </View>
         }
         contentContainerStyle={posts.length === 0 ? styles.emptyList : undefined}
@@ -266,18 +279,18 @@ export default function LevelPostsPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5'
+    backgroundColor: '#f5f5f5',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5'
+    backgroundColor: '#f5f5f5',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666'
+    color: '#666',
   },
   header: {
     backgroundColor: '#1e88e5',
@@ -285,30 +298,30 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 16,
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   backButton: {
-    marginRight: 12
+    marginRight: 12,
   },
   headerInfo: {
-    flex: 1
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff'
+    color: '#fff',
   },
   headerSubtitle: {
     fontSize: 16,
     color: '#fff',
     opacity: 0.9,
-    marginTop: 4
+    marginTop: 4,
   },
   headerFaculty: {
     fontSize: 14,
     color: '#fff',
     opacity: 0.8,
-    marginTop: 2
+    marginTop: 2,
   },
   createButton: {
     flexDirection: 'row',
@@ -322,13 +335,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3
+    elevation: 3,
   },
   createButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
-    marginLeft: 8
+    marginLeft: 8,
   },
   postCard: {
     backgroundColor: '#fff',
@@ -340,7 +353,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3
+    elevation: 3,
   },
   priorityBadge: {
     position: 'absolute',
@@ -348,12 +361,12 @@ const styles = StyleSheet.create({
     right: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4
+    borderRadius: 4,
   },
   priorityText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#fff'
+    color: '#fff',
   },
   pinnedBadge: {
     flexDirection: 'row',
@@ -363,53 +376,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    marginBottom: 12
+    marginBottom: 12,
   },
   pinnedText: {
     fontSize: 10,
     fontWeight: 'bold',
     color: '#fff',
-    marginLeft: 4
+    marginLeft: 4,
   },
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12
+    marginBottom: 12,
   },
   authorInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1
+    flex: 1,
   },
   authorDetails: {
     marginLeft: 12,
-    flex: 1
+    flex: 1,
   },
   authorName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333'
+    color: '#333',
   },
   authorRole: {
     fontSize: 12,
     color: '#666',
-    textTransform: 'capitalize'
+    textTransform: 'capitalize',
   },
   timestamp: {
     fontSize: 12,
-    color: '#999'
+    color: '#999',
   },
   postTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8
+    marginBottom: 8,
   },
   postContent: {
     fontSize: 15,
     color: '#555',
-    lineHeight: 22
+    lineHeight: 22,
   },
   imageContainer: {
     flexDirection: 'row',
@@ -417,49 +430,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     padding: 12,
     borderRadius: 8,
-    marginTop: 12
+    marginTop: 12,
   },
   imageText: {
     fontSize: 14,
     color: '#666',
-    marginLeft: 8
+    marginLeft: 8,
   },
   engagementBar: {
     flexDirection: 'row',
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0'
+    borderTopColor: '#f0f0f0',
   },
   engagementButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20
+    marginRight: 20,
   },
   engagementText: {
     fontSize: 14,
     color: '#666',
-    marginLeft: 4
+    marginLeft: 4,
   },
   emptyList: {
-    flexGrow: 1
+    flexGrow: 1,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40
+    padding: 40,
   },
   emptyText: {
     fontSize: 18,
     color: '#999',
     marginTop: 16,
-    textAlign: 'center'
+    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: 14,
     color: '#999',
     marginTop: 8,
-    textAlign: 'center'
-  }
+    textAlign: 'center',
+  },
 });

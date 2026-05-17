@@ -1,15 +1,43 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, Share, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Linking as RNLinking, ScrollView, Share, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as Calendar from 'expo-calendar';
+import * as ExpoLinking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { eventsAPI, type EventRecord } from '../../services/eventsApi';
 import { useAuth } from '../../context/AuthContext';
+import { canVerifyEventTickets } from '../../utils/permissions';
 import { showToast } from '../../utils/toast';
-import { formatEventCurrency, formatEventDate, formatEventDateTime, formatEventTimeRange, getEventAdmissionLabel, getEventAudienceLabel, getEventCategoryLabel, getEventCountdown, getEventFormatLabel, getEventSeatLabel } from '../../utils/events';
+import {
+  canAccessSecurePaidTicket,
+  formatEventCurrency,
+  formatEventDate,
+  formatEventDateTime,
+  formatEventTimeRange,
+  getEventAdmissionLabel,
+  getEventAudienceLabel,
+  getEventCategoryLabel,
+  getEventCountdown,
+  getEventFormatLabel,
+  getEventSeatLabel,
+  getEventTicketStatusLabel,
+  getEventTicketStatusTone,
+  getEventTicketSupportText,
+  isRetryablePaidTicketStatus,
+} from '../../utils/events';
+
+const pickParam = (value: string | string[] | undefined) => {
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+
+  return value || '';
+};
 
 const QuantityStepper = ({
   value,
@@ -36,7 +64,7 @@ const QuantityStepper = ({
 };
 
 export default function EventDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
   const router = useRouter();
   const { user } = useAuth();
   const isDark = useColorScheme() === 'dark';
@@ -45,6 +73,9 @@ export default function EventDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const checkoutRefreshTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const id = pickParam(params.id);
 
   const palette = {
     page: isDark ? '#06131F' : '#EAF5FF',
@@ -57,9 +88,15 @@ export default function EventDetailScreen() {
     accentAlt: '#0F9D58',
   };
 
-  const loadEvent = async () => {
+  const loadEvent = React.useCallback(async () => {
+    if (!id) {
+      setEvent(null);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await eventsAPI.get(String(id));
+      const response = await eventsAPI.get(id);
       setEvent(response.event);
       setQuantity(1);
     } catch {
@@ -68,11 +105,29 @@ export default function EventDetailScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadEvent();
   }, [id]);
+
+  const refreshAfterCheckoutSignal = React.useCallback(() => {
+    checkoutRefreshTimers.current.forEach(clearTimeout);
+    checkoutRefreshTimers.current = [1500, 5000, 10000].map((delay) =>
+      setTimeout(() => {
+        void loadEvent();
+      }, delay)
+    );
+  }, [loadEvent]);
+
+  React.useEffect(() => {
+    return () => {
+      checkoutRefreshTimers.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setLoading(true);
+      loadEvent();
+    }, [loadEvent])
+  );
 
   const addToCalendar = async () => {
     if (!event) {
@@ -130,9 +185,40 @@ export default function EventDetailScreen() {
     }
 
     try {
-      await Linking.openURL(event.streamUrl);
+      await RNLinking.openURL(event.streamUrl);
     } catch {
       showToast.error('Unable to open the event link.');
+    }
+  };
+
+  const openCheckout = async (checkoutUrl?: string) => {
+    if (!checkoutUrl) {
+      showToast.error('No checkout link is available for this ticket yet.');
+      return;
+    }
+
+    try {
+      const appRedirectUrl = ExpoLinking.createURL('/payments/paystack-callback');
+      const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, appRedirectUrl);
+
+      if (result.type === 'success' && result.url) {
+        const parsed = ExpoLinking.parse(result.url);
+        router.replace({
+          pathname: '/payments/paystack-callback' as any,
+          params: {
+            status: typeof parsed.queryParams?.status === 'string' ? parsed.queryParams.status : '',
+            reference: typeof parsed.queryParams?.reference === 'string' ? parsed.queryParams.reference : '',
+            trxref: typeof parsed.queryParams?.trxref === 'string' ? parsed.queryParams.trxref : '',
+          },
+        });
+        return;
+      }
+
+      showToast.info('Checking ticket status from Paystack webhook signal.');
+      refreshAfterCheckoutSignal();
+    } catch {
+      showToast.error('Unable to open Paystack checkout right now.');
+      refreshAfterCheckoutSignal();
     }
   };
 
@@ -149,11 +235,22 @@ export default function EventDetailScreen() {
 
     try {
       setBuying(true);
-      const response = await eventsAPI.purchase(event.id, { quantity });
+      const response = await eventsAPI.purchase(event.id, {
+        quantity,
+        redirectUrl: ExpoLinking.createURL('/payments/paystack-callback'),
+      });
+
       setEvent(response.event);
+
+      if (response.requiresPayment && response.checkoutUrl) {
+        showToast.info('Secure Paystack checkout is ready.', 'Checkout Ready');
+        await openCheckout(response.checkoutUrl);
+        return;
+      }
+
       showToast.success(response.message);
     } catch (error: any) {
-      showToast.error(error?.message || error?.response?.data?.message || 'Unable to complete the booking.');
+      showToast.error(error?.response?.data?.message || error?.message || 'Unable to complete the ticket request.');
     } finally {
       setBuying(false);
     }
@@ -182,10 +279,20 @@ export default function EventDetailScreen() {
   const registrationDeadline = event.registrationClosesAt || event.startsAt;
   const bookingClosed = new Date(registrationDeadline).getTime() <= Date.now() || new Date(event.startsAt).getTime() <= Date.now();
   const soldOut = !!event.isSoldOut;
-  const hasTicket = !!event.viewerTicket;
-  const buyDisabled = buying || soldOut || bookingClosed || hasTicket;
+  const ticket = event.viewerTicket || null;
+  const ticketTone = getEventTicketStatusTone(ticket);
+  const hasValidTicket = !!ticket?.isEntryReady;
+  const pendingPayment = ticket?.status === 'pending';
+  const canRetryPayment = isRetryablePaidTicketStatus(ticket?.status);
   const maxQuantity = Math.max(1, event.maxTicketsPerUser || 1);
   const totalPriceCents = event.isFree ? 0 : event.ticketPriceCents * quantity;
+  const canVerifyTickets = canVerifyEventTickets(user?.role);
+  const canOpenPaidTicketPage = !event.isFree && canAccessSecurePaidTicket(ticket);
+  const paidTicketActionLabel = ticket?.status === 'paid'
+    ? 'Open secure QR ticket'
+    : ticket?.status === 'checked-in'
+      ? 'View used ticket'
+      : 'Open payment ticket details';
 
   return (
     <LinearGradient colors={isDark ? ['#06131F', '#0B2034', '#102A44'] : ['#F4FAFF', '#E5F2FF', '#D7EBFF']} style={styles.flex}>
@@ -208,7 +315,7 @@ export default function EventDetailScreen() {
             </LinearGradient>
           )}
 
-          <LinearGradient colors={isDark ? ['rgba(6,19,31,0.12)', 'rgba(6,19,31,0.95)'] : ['rgba(255,255,255,0.0)', 'rgba(255,255,255,0.98)']} style={styles.heroContent}>
+          <LinearGradient colors={isDark ? ['rgba(6,19,31,0.12)', 'rgba(6,19,31,0.96)'] : ['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.98)']} style={styles.heroContent}>
             <View style={styles.badgeRow}>
               <View style={[styles.heroBadge, { backgroundColor: palette.accentSoft }]}>
                 <Text style={[styles.heroBadgeText, { color: palette.accent }]}>{getEventCategoryLabel(event.category)}</Text>
@@ -216,6 +323,11 @@ export default function EventDetailScreen() {
               <View style={[styles.heroBadge, { backgroundColor: event.isFree ? 'rgba(15,157,88,0.12)' : palette.accentSoft }]}>
                 <Text style={[styles.heroBadgeText, { color: event.isFree ? palette.accentAlt : palette.accent }]}>{getEventAdmissionLabel(event)}</Text>
               </View>
+              {ticket ? (
+                <View style={[styles.heroBadge, { backgroundColor: ticketTone.background }]}>
+                  <Text style={[styles.heroBadgeText, { color: ticketTone.accent }]}>{getEventTicketStatusLabel(ticket)}</Text>
+                </View>
+              ) : null}
             </View>
 
             <Text style={[styles.heroTitle, { color: palette.text }]}>{event.title}</Text>
@@ -238,21 +350,52 @@ export default function EventDetailScreen() {
           </LinearGradient>
         </Animated.View>
 
-        {hasTicket && event.viewerTicket ? (
+        {ticket ? (
           <Animated.View entering={FadeInDown.delay(70).duration(420)} style={[styles.ticketCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-            <View style={styles.ticketTopRow}>
-              <View>
-                <Text style={[styles.ticketTitle, { color: palette.text }]}>Your ticket is ready</Text>
-                <Text style={[styles.ticketSubtitle, { color: palette.subtext }]}>
-                  {event.isFree ? 'Reserved spot' : 'Booked ticket'} • {event.viewerTicket.quantity} ticket{event.viewerTicket.quantity === 1 ? '' : 's'}
-                </Text>
+            <LinearGradient colors={isDark ? ['rgba(12,34,54,0.98)', 'rgba(14,58,92,0.95)'] : ['#FFFFFF', '#EDF7FF']} style={styles.ticketPass}>
+              <View style={styles.ticketHeader}>
+                <View style={styles.ticketHeaderCopy}>
+                  <Text style={[styles.ticketEyebrow, { color: palette.subtext }]}>
+                    {event.isFree ? 'Event Pass' : 'Paid Ticket Summary'}
+                  </Text>
+                  <Text style={[styles.ticketTitle, { color: palette.text }]}>{ticket.ticketId}</Text>
+                  <Text style={[styles.ticketSubtitle, { color: palette.subtext }]}>
+                    {getEventTicketSupportText(ticket)}
+                  </Text>
+                </View>
+                <View style={[styles.ticketStatusPill, { backgroundColor: ticketTone.background }]}>
+                  <Text style={[styles.ticketStatusText, { color: ticketTone.accent }]}>{getEventTicketStatusLabel(ticket)}</Text>
+                </View>
               </View>
-              <Ionicons name="ticket-outline" size={22} color={palette.accent} />
-            </View>
-            <View style={[styles.ticketCodeBox, { backgroundColor: palette.accentSoft }]}>
-              <Text style={[styles.ticketCodeLabel, { color: palette.subtext }]}>Ticket code</Text>
-              <Text style={[styles.ticketCodeValue, { color: palette.text }]}>{event.viewerTicket.ticketCode}</Text>
-            </View>
+
+              <View style={styles.ticketSummaryRow}>
+                <View style={[styles.ticketSummaryPill, { backgroundColor: palette.accentSoft }]}>
+                  <Ionicons name="person-outline" size={15} color={palette.accent} />
+                  <Text style={[styles.ticketSummaryText, { color: palette.text }]} numberOfLines={1}>{user?.name || 'Attendee'}</Text>
+                </View>
+                <View style={[styles.ticketSummaryPill, { backgroundColor: palette.accentSoft }]}>
+                  <Ionicons name="layers-outline" size={15} color={palette.accent} />
+                  <Text style={[styles.ticketSummaryText, { color: palette.text }]}>{ticket.quantity} ticket{ticket.quantity === 1 ? '' : 's'}</Text>
+                </View>
+              </View>
+
+              {pendingPayment && ticket.payment?.checkoutUrl ? (
+                <TouchableOpacity style={[styles.primaryAction, { backgroundColor: palette.accent }]} onPress={() => openCheckout(ticket.payment?.checkoutUrl)}>
+                  <Ionicons name="card-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.primaryActionText}>Complete payment</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {canOpenPaidTicketPage ? (
+                <TouchableOpacity
+                  style={[styles.secondaryTicketAction, { borderColor: palette.border, backgroundColor: palette.card }]}
+                  onPress={() => router.push({ pathname: '/paid-ticket/[eventId]' as any, params: { eventId: event.id } })}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={18} color={palette.accent} />
+                  <Text style={[styles.secondaryTicketActionText, { color: palette.text }]}>{paidTicketActionLabel}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </LinearGradient>
           </Animated.View>
         ) : null}
 
@@ -297,17 +440,21 @@ export default function EventDetailScreen() {
           ) : null}
         </Animated.View>
 
-        {!hasTicket ? (
+        {!hasValidTicket && !pendingPayment ? (
           <Animated.View entering={FadeInDown.delay(160).duration(420)} style={[styles.infoCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-            <Text style={[styles.sectionTitle, { color: palette.text }]}>{event.isFree ? 'Reserve your spot' : 'Buy your ticket'}</Text>
+            <Text style={[styles.sectionTitle, { color: palette.text }]}>
+              {event.isFree ? 'Reserve your place' : canRetryPayment ? 'Reactivate this ticket' : 'Get your ticket'}
+            </Text>
             <Text style={[styles.purchaseSummary, { color: palette.subtext }]}>
               {soldOut
                 ? 'This event has reached capacity.'
                 : bookingClosed
                   ? 'Ticketing is closed for this event.'
-                  : event.isFree
-                    ? 'Reserve your place now and receive a ticket code instantly.'
-                    : `Tickets are ${formatEventCurrency(event.ticketPriceCents, event.currency)} each.`}
+                    : event.isFree
+                      ? 'Reserve your place now and receive a live QR pass instantly.'
+                    : canRetryPayment
+                      ? 'Create a fresh Paystack checkout session to finish this ticket.'
+                      : `Tickets are ${formatEventCurrency(event.ticketPriceCents, event.currency)} each with secure Paystack checkout.`}
             </Text>
 
             {maxQuantity > 1 ? (
@@ -327,10 +474,20 @@ export default function EventDetailScreen() {
               </View>
             ) : null}
 
-            <TouchableOpacity disabled={buyDisabled} onPress={handlePurchase} style={[styles.primaryAction, { backgroundColor: buyDisabled ? '#8FA7BE' : palette.accent }]}>
+            <TouchableOpacity
+              disabled={buying || soldOut || bookingClosed}
+              onPress={handlePurchase}
+              style={[styles.primaryAction, { backgroundColor: buying || soldOut || bookingClosed ? '#8FA7BE' : palette.accent }]}
+            >
               <Ionicons name={event.isFree ? 'checkmark-circle-outline' : 'card-outline'} size={18} color="#FFFFFF" />
               <Text style={styles.primaryActionText}>
-                {buying ? 'Processing...' : event.isFree ? 'Reserve spot' : 'Buy ticket'}
+                {buying
+                  ? 'Processing...'
+                  : event.isFree
+                    ? 'Reserve spot'
+                    : canRetryPayment
+                      ? 'Create new checkout'
+                      : 'Secure checkout'}
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -349,6 +506,15 @@ export default function EventDetailScreen() {
               <Text style={[styles.secondaryActionText, { color: palette.text }]}>Open event link</Text>
             </TouchableOpacity>
           ) : null}
+          {canVerifyTickets ? (
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/event-ticket-verifier' as any, params: { eventTitle: event.title } })}
+              style={[styles.secondaryAction, { backgroundColor: palette.card, borderColor: palette.border }]}
+            >
+              <Ionicons name="scan-outline" size={18} color={palette.accent} />
+              <Text style={[styles.secondaryActionText, { color: palette.text }]}>Verify tickets</Text>
+            </TouchableOpacity>
+          ) : null}
         </Animated.View>
       </ScrollView>
     </LinearGradient>
@@ -361,44 +527,41 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
-    padding: 24,
+    paddingHorizontal: 24,
+    gap: 10,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   notFoundTitle: {
-    fontSize: 24,
-    fontWeight: '900',
+    fontSize: 22,
+    fontWeight: '800',
   },
   backToListButton: {
-    height: 48,
-    paddingHorizontal: 22,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
   },
   backToListText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 38,
-    gap: 16,
+    paddingTop: 30,
+    paddingBottom: 120,
+    gap: 14,
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
     borderWidth: 1,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -409,17 +572,19 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     width: '100%',
-    height: 240,
+    height: 300,
   },
   heroFallback: {
     width: '100%',
-    height: 240,
+    height: 300,
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroContent: {
-    padding: 18,
-    gap: 16,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 20,
+    gap: 14,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -427,9 +592,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   heroBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   heroBadgeText: {
     fontSize: 12,
@@ -441,8 +606,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   heroSubtitle: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 22,
   },
   metaCardGrid: {
     flexDirection: 'row',
@@ -453,67 +618,92 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 18,
     padding: 14,
-    gap: 6,
+    gap: 4,
   },
   metaLabel: {
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.6,
   },
   metaValue: {
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
   },
   metaSubvalue: {
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600',
   },
   ticketCard: {
-    borderRadius: 24,
     borderWidth: 1,
-    padding: 18,
-    gap: 14,
+    borderRadius: 28,
+    overflow: 'hidden',
   },
-  ticketTopRow: {
+  ticketPass: {
+    padding: 18,
+    gap: 16,
+  },
+  ticketHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
+  ticketHeaderCopy: {
+    flex: 1,
+    gap: 5,
+  },
+  ticketEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
   ticketTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
   },
   ticketSubtitle: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 21,
   },
-  ticketCodeBox: {
-    borderRadius: 20,
-    padding: 16,
+  ticketStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ticketStatusText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  ticketSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  ticketSummaryPill: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  ticketCodeLabel: {
-    fontSize: 12,
+  ticketSummaryText: {
+    flex: 1,
+    fontSize: 14,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  ticketCodeValue: {
-    fontSize: 24,
-    fontWeight: '900',
   },
   infoCard: {
-    borderRadius: 24,
     borderWidth: 1,
-    padding: 18,
+    borderRadius: 24,
+    padding: 16,
     gap: 14,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '900',
+    fontSize: 18,
+    fontWeight: '800',
   },
   detailText: {
     fontSize: 14,
@@ -524,39 +714,37 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 10,
+    alignItems: 'flex-start',
   },
   detailRowText: {
     flex: 1,
     fontSize: 14,
     lineHeight: 21,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   organizerName: {
     fontSize: 18,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   organizerMeta: {
     fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
   },
   instructionsBox: {
     borderRadius: 18,
     padding: 14,
-    gap: 8,
+    gap: 6,
   },
   instructionsLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
   },
   instructionsText: {
     fontSize: 14,
     lineHeight: 21,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   purchaseSummary: {
     fontSize: 14,
@@ -564,8 +752,8 @@ const styles = StyleSheet.create({
   },
   purchaseRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
   },
   purchaseCopy: {
@@ -578,73 +766,84 @@ const styles = StyleSheet.create({
   },
   purchaseHelper: {
     fontSize: 13,
-    lineHeight: 19,
   },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 8,
-    height: 50,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    minWidth: 124,
+    justifyContent: 'space-between',
   },
   stepperButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperValue: {
-    minWidth: 36,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '800',
   },
   totalBox: {
     borderRadius: 18,
-    padding: 16,
-    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   totalLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
   totalValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
   },
   primaryAction: {
-    height: 54,
     borderRadius: 18,
+    paddingVertical: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
   },
   primaryActionText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '800',
+  },
+  secondaryTicketAction: {
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingVertical: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  secondaryTicketActionText: {
+    fontSize: 15,
+    fontWeight: '800',
   },
   actionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   secondaryAction: {
     borderWidth: 1,
     borderRadius: 18,
     paddingHorizontal: 16,
-    height: 50,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 9,
   },
   secondaryActionText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
   },
 });

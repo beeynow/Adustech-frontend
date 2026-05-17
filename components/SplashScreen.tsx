@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 export default function SplashScreen() {
   const colorScheme = useColorScheme();
@@ -105,7 +105,7 @@ export default function SplashScreen() {
         }),
       ])
     ).start();
-  }, []);
+  }, [fadeAnim, glowAnim, pulseAnim, rotateAnim, scaleAnim, shimmerAnim, slideAnim]);
 
   const rotate = rotateAnim.interpolate({
     inputRange: [0, 1],

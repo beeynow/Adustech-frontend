@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import { eventsAPI, type EventRecord } from '../services/eventsApi';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../utils/toast';
-import { formatEventDate, formatEventTimeRange, getEventAdmissionLabel, getEventCategoryLabel, getEventCountdown, getEventSeatLabel } from '../utils/events';
+import { formatEventDate, formatEventTimeRange, getEventAdmissionLabel, getEventCategoryLabel, getEventCountdown, getEventSeatLabel, getEventTicketStatusLabel, getEventTicketStatusTone } from '../utils/events';
 
 type FilterValue = 'all' | 'featured' | 'free' | 'paid';
 
@@ -108,7 +108,7 @@ export default function EventsScreen() {
             <View style={styles.heroHeadingBlock}>
               <Text style={[styles.heroTitle, { color: palette.text }]}>Discover what is happening on campus.</Text>
               <Text style={[styles.heroSubtitle, { color: palette.subtext }]}>
-                Smaller, clearer event browsing with the next highlight always in view.
+                Professional event discovery with clear timing, access, and ticket state at a glance.
               </Text>
             </View>
 
@@ -150,9 +150,18 @@ export default function EventsScreen() {
                     {formatEventDate(heroEvent.startsAt)} • {formatEventTimeRange(heroEvent.startsAt, heroEvent.endsAt)}
                   </Text>
                   <View style={styles.heroHighlightFooter}>
-                    <Text style={[styles.heroEventSummary, { color: palette.subtext }]} numberOfLines={1}>
-                      {heroEvent.location || getEventAdmissionLabel(heroEvent)}
-                    </Text>
+                    <View style={styles.heroFooterLeft}>
+                      <Text style={[styles.heroEventSummary, { color: palette.subtext }]} numberOfLines={1}>
+                        {heroEvent.location || getEventAdmissionLabel(heroEvent)}
+                      </Text>
+                      {heroEvent.viewerTicket ? (
+                        <View style={[styles.heroTicketPill, { backgroundColor: getEventTicketStatusTone(heroEvent.viewerTicket).background }]}>
+                          <Text style={[styles.heroTicketText, { color: getEventTicketStatusTone(heroEvent.viewerTicket).accent }]}>
+                            {getEventTicketStatusLabel(heroEvent.viewerTicket)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <View style={[styles.heroOpenPill, { backgroundColor: palette.accentSoft }]}>
                       <Text style={[styles.heroOpenText, { color: palette.accent }]}>Open</Text>
                     </View>
@@ -234,6 +243,13 @@ export default function EventsScreen() {
                           <Text style={[styles.inlineTagText, { color: '#FFFFFF' }]}>Featured</Text>
                         </View>
                       ) : null}
+                      {event.viewerTicket ? (
+                        <View style={[styles.inlineTag, { backgroundColor: getEventTicketStatusTone(event.viewerTicket).background }]}>
+                          <Text style={[styles.inlineTagText, { color: getEventTicketStatusTone(event.viewerTicket).accent }]}>
+                            {getEventTicketStatusLabel(event.viewerTicket)}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
 
                     <View
@@ -279,6 +295,12 @@ export default function EventsScreen() {
                         <Text style={[styles.eventMetaText, { color: palette.subtext }]} numberOfLines={1}>{event.location}</Text>
                       </View>
                     ) : null}
+                    <View style={styles.eventMetaRow}>
+                      <Ionicons name="person-outline" size={15} color={palette.accent} />
+                      <Text style={[styles.eventMetaText, { color: palette.subtext }]} numberOfLines={1}>
+                        {event.organizerName || event.createdByName}
+                      </Text>
+                    </View>
                   </View>
 
                   <View style={styles.eventBottomRow}>
@@ -462,11 +484,25 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 2,
   },
+  heroFooterLeft: {
+    flex: 1,
+    gap: 8,
+  },
   heroEventSummary: {
     flex: 1,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '600',
+  },
+  heroTicketPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  heroTicketText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   heroOpenPill: {
     paddingHorizontal: 11,

@@ -5,6 +5,7 @@ import { NotificationsProvider } from '../context/NotificationsContext';
 import SplashScreenComponent from '../components/SplashScreen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppToast } from '../components/AppToast';
+import PushNotificationsBridge from '../components/PushNotificationsBridge';
 
 const MIN_SPLASH_MS = 800;
 
@@ -41,6 +42,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <NotificationsProvider>
+          <PushNotificationsBridge />
           <Stack
             screenOptions={{
               headerShown: false,

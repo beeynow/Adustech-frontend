@@ -90,6 +90,54 @@ export interface PostPagination {
   hasMore: boolean;
 }
 
+export interface ListPostsParams {
+  q?: string;
+  search?: string;
+  category?: string;
+  page?: number;
+  limit?: number;
+  departmentId?: string;
+  level?: string;
+  levelId?: string;
+}
+
+export interface PostsListResponse {
+  success: boolean;
+  posts: PostItem[];
+  pagination: PostPagination;
+}
+
+export interface PostMutationResponse {
+  success: boolean;
+  message: string;
+  post: PostItem;
+}
+
+export interface LikeMutationResponse {
+  success: boolean;
+  liked: boolean;
+  likesCount: number;
+  message: string;
+}
+
+export interface PostDetailResponse {
+  success: boolean;
+  post: PostItem;
+}
+
+export interface PostCommentsResponse {
+  success: boolean;
+  comments: PostComment[];
+  total: number;
+}
+
+export interface CommentMutationResponse {
+  success: boolean;
+  message: string;
+  comment: PostComment;
+  commentsCount: number;
+}
+
 const normalizeString = (value: unknown): string => {
   return typeof value === 'string' ? value : '';
 };
@@ -282,16 +330,7 @@ const extractError = (error: unknown, fallbackMessage: string): never => {
 };
 
 export const postsAPI = {
-  list: async (params?: {
-    q?: string;
-    search?: string;
-    category?: string;
-    page?: number;
-    limit?: number;
-    departmentId?: string;
-    level?: string;
-    levelId?: string;
-  }) => {
+  list: async (params?: ListPostsParams): Promise<PostsListResponse> => {
     try {
       const response = await api.get('/posts', {
         params: {
@@ -311,7 +350,7 @@ export const postsAPI = {
         pagination: normalizePagination(response.data?.pagination),
       };
     } catch (error) {
-      extractError(error, 'Failed to fetch posts.');
+      return extractError(error, 'Failed to fetch posts.');
     }
   },
 
@@ -322,7 +361,7 @@ export const postsAPI = {
     departmentId?: string;
     level?: string;
     levelId?: string;
-  }) => {
+  }): Promise<PostMutationResponse> => {
     try {
       const response = await api.post('/posts', payload);
       return {
@@ -331,11 +370,11 @@ export const postsAPI = {
         post: normalizePost(response.data?.post),
       };
     } catch (error) {
-      extractError(error, 'Failed to create post.');
+      return extractError(error, 'Failed to create post.');
     }
   },
 
-  toggleLike: async (id: string) => {
+  toggleLike: async (id: string): Promise<LikeMutationResponse> => {
     try {
       const response = await api.post(`/posts/${id}/like`);
       return {
@@ -345,11 +384,11 @@ export const postsAPI = {
         message: normalizeString(response.data?.message),
       };
     } catch (error) {
-      extractError(error, 'Failed to update post like.');
+      return extractError(error, 'Failed to update post like.');
     }
   },
 
-  get: async (id: string) => {
+  get: async (id: string): Promise<PostDetailResponse> => {
     try {
       const response = await api.get(`/posts/${id}`);
       return {
@@ -357,11 +396,11 @@ export const postsAPI = {
         post: normalizePost(response.data?.post),
       };
     } catch (error) {
-      extractError(error, 'Failed to fetch post.');
+      return extractError(error, 'Failed to fetch post.');
     }
   },
 
-  listComments: async (id: string) => {
+  listComments: async (id: string): Promise<PostCommentsResponse> => {
     try {
       const response = await api.get(`/posts/${id}/comments`);
       return {
@@ -370,11 +409,11 @@ export const postsAPI = {
         total: normalizeNumber(response.data?.total),
       };
     } catch (error) {
-      extractError(error, 'Failed to fetch comments.');
+      return extractError(error, 'Failed to fetch comments.');
     }
   },
 
-  addComment: async (id: string, text: string, parentId?: string) => {
+  addComment: async (id: string, text: string, parentId?: string): Promise<CommentMutationResponse> => {
     try {
       const response = await api.post(`/posts/${id}/comments`, { text, parentId });
       return {
@@ -384,11 +423,11 @@ export const postsAPI = {
         commentsCount: normalizeNumber(response.data?.commentsCount),
       };
     } catch (error) {
-      extractError(error, 'Failed to add comment.');
+      return extractError(error, 'Failed to add comment.');
     }
   },
 
-  toggleLikeComment: async (postId: string, commentId: string) => {
+  toggleLikeComment: async (postId: string, commentId: string): Promise<LikeMutationResponse> => {
     try {
       const response = await api.post(`/posts/${postId}/comments/${commentId}/like`);
       return {
@@ -398,7 +437,7 @@ export const postsAPI = {
         message: normalizeString(response.data?.message),
       };
     } catch (error) {
-      extractError(error, 'Failed to update comment like.');
+      return extractError(error, 'Failed to update comment like.');
     }
   },
 };

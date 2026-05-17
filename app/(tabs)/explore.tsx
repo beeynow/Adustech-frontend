@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/AppChrome';
 import { useAppTheme } from '@/utils/theme';
 
-const categories: Array<{ icon: keyof typeof Ionicons.glyphMap; name: string; count: number }> = [
+const categories: { icon: keyof typeof Ionicons.glyphMap; name: string; count: number }[] = [
   { icon: 'book-outline', name: 'Courses', count: 24 },
   { icon: 'people-outline', name: 'Community', count: 156 },
   { icon: 'library-outline', name: 'Library', count: 89 },
@@ -20,7 +20,7 @@ const categories: Array<{ icon: keyof typeof Ionicons.glyphMap; name: string; co
   { icon: 'trophy-outline', name: 'Achievements', count: 34 },
 ];
 
-const trending: Array<{ icon: keyof typeof Ionicons.glyphMap; title: string; category: string; students: number }> = [
+const trending: { icon: keyof typeof Ionicons.glyphMap; title: string; category: string; students: number }[] = [
   {
     icon: 'flame-outline',
     title: 'Introduction to AI',

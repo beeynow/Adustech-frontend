@@ -20,6 +20,10 @@
     "ios": {
       "bundleIdentifier": "com.adustech.app",
       "buildNumber": "1.0.0",
+      "associatedDomains": [
+        "applinks:www.beeynow.online",
+        "applinks:beeynow.online"
+      ],
       "infoPlist": {
         "NSCalendarsUsageDescription": "We use your calendar to add events you choose.",
         "NSPhotoLibraryUsageDescription": "We need access to your photo library to let you upload images.",
@@ -50,7 +54,8 @@
       "permissions": [
         "CAMERA",
         "READ_CALENDAR",
-        "WRITE_CALENDAR"
+        "WRITE_CALENDAR",
+        "POST_NOTIFICATIONS"
       ],
       "splash": {
         "image": "./assets/images/plash.png",
@@ -62,7 +67,41 @@
         }
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.beeynow.online",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "beeynow.online",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "adustech"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -88,6 +127,13 @@
           }
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#1976D2"
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {
@@ -95,6 +141,7 @@
       "reactCompiler": true
     },
     "extra": {
+      "apiBaseUrl": "https://adustech-backend.vercel.app",
       "router": {},
       "eas": {
         "projectId": "b2281a15-9a91-420f-8129-4348b0de616d"

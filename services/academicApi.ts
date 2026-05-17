@@ -17,6 +17,102 @@ interface CreatePostData {
   image_url?: string;
 }
 
+export interface FacultyRecord {
+  id: string;
+  name: string;
+  code?: string;
+}
+
+export interface DepartmentRecord {
+  id: string;
+  name: string;
+  code?: string;
+  facultyId?: string;
+  faculty?: FacultyRecord;
+}
+
+export interface LevelRecord {
+  id: string;
+  levelNumber: number;
+  displayName: string;
+  department: DepartmentRecord & {
+    faculty?: FacultyRecord;
+  };
+}
+
+export interface AcademicPostRecord {
+  id: string;
+  title?: string;
+  text?: string;
+  content?: string;
+  priority?: string;
+  category?: string;
+  imageUrl?: string;
+  image_url?: string;
+  isPinned?: boolean;
+  likesCount?: number;
+  commentsCount?: number;
+  viewsCount?: number;
+  isLiked?: boolean;
+  createdAt?: string;
+  author?: {
+    id?: string;
+    name?: string;
+    fullName?: string;
+    role?: string;
+  };
+}
+
+export interface AcademicPagination {
+  currentPage?: number;
+  totalPages?: number;
+  totalPosts?: number;
+  hasMore?: boolean;
+}
+
+export interface AcademicFacultiesResponse {
+  success: boolean;
+  faculties: FacultyRecord[];
+  total?: number;
+}
+
+export interface AcademicDepartmentsResponse {
+  success: boolean;
+  departments: DepartmentRecord[];
+  total?: number;
+}
+
+export interface AcademicLevelsResponse {
+  success: boolean;
+  levels: LevelRecord[];
+  total?: number;
+}
+
+export interface AcademicLevelResponse {
+  success: boolean;
+  level: LevelRecord;
+}
+
+export interface AcademicLevelPostsResponse {
+  success: boolean;
+  level?: LevelRecord;
+  posts: AcademicPostRecord[];
+  pagination: AcademicPagination;
+}
+
+export interface AcademicLikeResponse {
+  success: boolean;
+  isLiked: boolean;
+  likesCount: number;
+  message?: string;
+}
+
+export interface AcademicPostMutationResponse {
+  success: boolean;
+  message?: string;
+  post?: AcademicPostRecord;
+}
+
 const mapAcademicPostPayload = (postData: CreatePostData) => ({
   title: postData.title,
   content: postData.content,
@@ -42,12 +138,12 @@ const extractError = (error: unknown, fallback: string) => {
 };
 
 export const academicApi = {
-  getFaculties: async () => {
+  getFaculties: async (): Promise<AcademicFacultiesResponse> => {
     try {
       const response = await api.get('/faculties');
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to fetch faculties.');
+      return extractError(error, 'Failed to fetch faculties.');
     }
   },
 
@@ -60,12 +156,12 @@ export const academicApi = {
     }
   },
 
-  getFacultyDepartments: async (facultyId: string) => {
+  getFacultyDepartments: async (facultyId: string): Promise<AcademicDepartmentsResponse> => {
     try {
       const response = await api.get(`/faculties/${facultyId}/departments`);
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to fetch departments.');
+      return extractError(error, 'Failed to fetch departments.');
     }
   },
 
@@ -78,21 +174,21 @@ export const academicApi = {
     }
   },
 
-  getDepartmentLevels: async (departmentId: string) => {
+  getDepartmentLevels: async (departmentId: string): Promise<AcademicLevelsResponse> => {
     try {
       const response = await api.get(`/faculties/departments/${departmentId}/levels`);
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to fetch department levels.');
+      return extractError(error, 'Failed to fetch department levels.');
     }
   },
 
-  getLevel: async (levelId: string) => {
+  getLevel: async (levelId: string): Promise<AcademicLevelResponse> => {
     try {
       const response = await api.get(`/faculties/levels/${levelId}`);
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to fetch level.');
+      return extractError(error, 'Failed to fetch level.');
     }
   },
 
@@ -114,12 +210,12 @@ export const academicApi = {
     }
   },
 
-  getLevelPosts: async (levelId: string, params: PaginationParams = {}) => {
+  getLevelPosts: async (levelId: string, params: PaginationParams = {}): Promise<AcademicLevelPostsResponse> => {
     try {
       const response = await api.get(`/academic/posts/level/${levelId}`, { params });
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to fetch level posts.');
+      return extractError(error, 'Failed to fetch level posts.');
     }
   },
 
@@ -132,21 +228,21 @@ export const academicApi = {
     }
   },
 
-  createPost: async (postData: CreatePostData) => {
+  createPost: async (postData: CreatePostData): Promise<AcademicPostMutationResponse> => {
     try {
       const response = await api.post('/academic/posts', mapAcademicPostPayload(postData));
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to create post.');
+      return extractError(error, 'Failed to create post.');
     }
   },
 
-  updatePost: async (postId: string, updateData: Partial<CreatePostData>) => {
+  updatePost: async (postId: string, updateData: Partial<CreatePostData>): Promise<AcademicPostMutationResponse> => {
     try {
       const response = await api.put(`/academic/posts/${postId}`, mapPartialAcademicPostPayload(updateData));
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to update post.');
+      return extractError(error, 'Failed to update post.');
     }
   },
 
@@ -159,24 +255,29 @@ export const academicApi = {
     }
   },
 
-  likePost: async (postId: string) => {
+  likePost: async (postId: string): Promise<AcademicLikeResponse> => {
     try {
       const response = await api.post(`/academic/posts/${postId}/like`);
-      return response.data;
+      return {
+        success: response.data?.success !== false,
+        isLiked: response.data?.isLiked === true,
+        likesCount: typeof response.data?.likesCount === 'number' ? response.data.likesCount : 0,
+        message: response.data?.message,
+      };
     } catch (error) {
-      extractError(error, 'Failed to update post like.');
+      return extractError(error, 'Failed to update post like.');
     }
   },
 
   addComment: async (postId: string, text: string, parentId?: string) => {
     try {
       const response = await api.post(`/academic/posts/${postId}/comments`, {
-        text,
+        content: text,
         parentId,
       });
       return response.data;
     } catch (error) {
-      extractError(error, 'Failed to add comment.');
+      return extractError(error, 'Failed to add comment.');
     }
   },
 

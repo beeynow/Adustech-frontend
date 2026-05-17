@@ -200,7 +200,7 @@ export const authAPI = {
     }
   },
 
-  createAdmin: async (payload: { name: string; email: string; password: string; role: 'admin' | 'd-admin'; departmentId?: string }) => {
+  createAdmin: async (payload: { email: string }) => {
     try {
       const response = await api.post('/auth/create-admin', payload);
       return { success: true, data: response.data };

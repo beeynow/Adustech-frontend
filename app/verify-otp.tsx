@@ -114,7 +114,7 @@ export default function VerifyOTPScreen() {
     } finally {
       setLoading(false);
     }
-  }, [attempts, email, loading, resendOTP, resending, router, timeLeft, triggerShake, verifyOTP]);
+  }, [attempts, email, loading, resending, router, timeLeft, triggerShake, verifyOTP]);
 
   const handleResend = async () => {
     if (resendCooldown > 0 || loading || resending) {

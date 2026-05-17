@@ -1,204 +1,100 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, useColorScheme, Pressable, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { showToast } from '../utils/toast';
-import { getPasswordValidationErrors, isValidEmail, normalizeEmail } from '../utils/validation';
-import { departmentsAPI, Department } from '../services/departmentsApi';
+import { isValidEmail, normalizeEmail } from '../utils/validation';
 
 export default function CreateAdminScreen() {
   const { user } = useAuth();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'd-admin'>('admin');
-  const [loading, setLoading] = useState(false);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [departmentsLoading, setDepartmentsLoading] = useState(false);
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
-  const passwordErrors = useMemo(() => getPasswordValidationErrors(password), [password]);
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const loadDepartments = async () => {
-      try {
-        setDepartmentsLoading(true);
-        const response = await departmentsAPI.list({ isActive: true });
-        setDepartments(response.departments || []);
-      } catch {
-        showToast.error('Failed to load departments for admin assignment.');
-      } finally {
-        setDepartmentsLoading(false);
-      }
-    };
-
-    loadDepartments();
-  }, []);
-
-  if (user?.role !== 'power') {
-    return (
-      <View style={[styles.center, { flex: 1, backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}> 
-        <Text style={{ color: isDark ? '#FFFFFF' : '#0A1929' }}>Forbidden: Power admin only</Text>
-      </View>
-    );
-  }
+  const palette = {
+    page: isDark ? ['#06131F', '#0B2034'] as const : ['#F4FAFF', '#E4F1FF'] as const,
+    card: isDark ? 'rgba(8, 28, 45, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+    border: isDark ? 'rgba(110, 166, 245, 0.2)' : 'rgba(24, 96, 168, 0.13)',
+    text: isDark ? '#F6FAFF' : '#09233B',
+    subtext: isDark ? '#A8C6E6' : '#607488',
+    accent: '#1976D2',
+    accentSoft: isDark ? 'rgba(25,118,210,0.2)' : 'rgba(25,118,210,0.1)',
+  };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !email.trim() || !password) {
-      showToast.warning('Name, email, password, and role are required.');
+    const normalizedEmail = normalizeEmail(email);
+    if (!isValidEmail(normalizedEmail)) {
+      showToast.error('Enter a valid admin email address.', 'Invalid Email');
       return;
     }
-    if (!isValidEmail(email)) {
-      showToast.error('Enter a valid email address.', 'Invalid Email');
-      return;
-    }
-    if (passwordErrors.length > 0) {
-      showToast.error(passwordErrors[0], 'Weak Password');
-      return;
-    }
-    if (role === 'd-admin' && !selectedDepartmentId) {
-      showToast.warning('Choose the department this admin will manage.');
-      return;
-    }
-    setLoading(true);
-    const res = await authAPI.createAdmin({
-      name: name.trim(),
-      email: normalizeEmail(email),
-      password,
-      role,
-      departmentId: role === 'd-admin' ? selectedDepartmentId : undefined,
-    });
-    setLoading(false);
-    if (res.success) {
-      showToast.success(res.data.message || 'Admin created successfully.');
-      router.back();
-    } else {
-      showToast.error(res.message || 'Failed to create admin.');
+
+    try {
+      setLoading(true);
+      const response = await authAPI.createAdmin({ email: normalizedEmail });
+      if (response.success) {
+        showToast.success(response.data?.message || 'Admin email saved.');
+        router.back();
+        return;
+      }
+
+      showToast.error(response.message || 'Failed to save admin email.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const bgGradient = isDark ? ['#0A1929', '#0B2742'] : ['#E6F4FE', '#DCEEFE'];
-  const cardBg = isDark ? '#0F213A' : '#FFFFFF';
-  const muted = isDark ? '#90CAF9' : '#607D8B';
-  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
-  const inputBg = isDark ? '#122A4A' : '#F8FAFC';
-  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
+  if (user?.role !== 'power') {
+    return (
+      <LinearGradient colors={palette.page} style={styles.center}>
+        <Ionicons name="shield-outline" size={34} color={palette.accent} />
+        <Text style={[styles.restrictedTitle, { color: palette.text }]}>Power admin only</Text>
+        <Text style={[styles.restrictedText, { color: palette.subtext }]}>
+          Only the protected power admin can add emails to the admin allowlist.
+        </Text>
+      </LinearGradient>
+    );
+  }
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-      <LinearGradient colors={bgGradient} style={styles.flex}>
+      <LinearGradient colors={palette.page} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}> 
-            <View style={styles.header}>
-              <View style={[styles.logoCircle, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}> 
-                <Text style={styles.logoText}>AT</Text>
-              </View>
-              <Text style={[styles.title, { color: textPrimary }]}>Create Admin</Text>
-              <Text style={[styles.subtitle, { color: muted }]}>Only 
-                <Text style={{ fontWeight: 'bold', color: isDark ? '#FFFFFF' : '#0A1929' }}> Power Admin </Text>
-                can create admin positions
-              </Text>
+          <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <View style={[styles.iconShell, { backgroundColor: palette.accentSoft }]}>
+              <Ionicons name="person-add-outline" size={30} color={palette.accent} />
             </View>
 
-            {/* Name */}
-            <View style={[styles.inputGroup, { backgroundColor: inputBg, borderColor: border }]}> 
-              <Ionicons name="person-outline" size={20} color={muted} style={styles.leadingIcon} />
-              <TextInput
-                style={[styles.input, { color: textPrimary }]}
-                placeholder="Full name"
-                placeholderTextColor={muted}
-                value={name}
-                onChangeText={setName}
-                editable={!loading}
-              />
-            </View>
+            <Text style={[styles.title, { color: palette.text }]}>Add Admin Email</Text>
+            <Text style={[styles.subtitle, { color: palette.subtext }]}>
+              Save a trusted email to the admin allowlist. If the user already exists, they become an admin immediately. If not, they become admin automatically when they register with this email.
+            </Text>
 
-            {/* Email */}
-            <View style={[styles.inputGroup, { backgroundColor: inputBg, borderColor: border }]}> 
-              <Ionicons name="mail-outline" size={20} color={muted} style={styles.leadingIcon} />
+            <View style={[styles.inputGroup, { backgroundColor: isDark ? '#102A43' : '#F8FBFF', borderColor: palette.border }]}>
+              <Ionicons name="mail-outline" size={20} color={palette.subtext} />
               <TextInput
-                style={[styles.input, { color: textPrimary }]}
-                placeholder="Email"
-                placeholderTextColor={muted}
+                style={[styles.input, { color: palette.text }]}
+                placeholder="newadmin@school.edu"
+                placeholderTextColor={palette.subtext}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect={false}
                 keyboardType="email-address"
                 editable={!loading}
               />
             </View>
 
-            {/* Password */}
-            <View style={[styles.inputGroup, { backgroundColor: inputBg, borderColor: border }]}> 
-              <Ionicons name="lock-closed-outline" size={20} color={muted} style={styles.leadingIcon} />
-              <TextInput
-                style={[styles.input, { color: textPrimary }]}
-                placeholder="Temporary password"
-                placeholderTextColor={muted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                editable={!loading}
-              />
+            <View style={[styles.notice, { backgroundColor: palette.accentSoft }]}>
+              <Ionicons name="checkmark-done-outline" size={18} color={palette.accent} />
+              <Text style={[styles.noticeText, { color: palette.text }]}>
+                No password is created here. The user keeps their own registration and verification flow, while the backend safely assigns the admin role from the allowlist.
+              </Text>
             </View>
-
-            {/* Role */}
-            <View style={[styles.inputGroup, { backgroundColor: inputBg, borderColor: border }]}> 
-              <Ionicons name="ribbon-outline" size={20} color={muted} style={styles.leadingIcon} />
-              <View style={styles.roleSwitch}>
-                <TouchableOpacity
-                  onPress={() => setRole('admin')}
-                  style={[styles.roleChip, role === 'admin' && styles.roleChipActive]}
-                  disabled={loading}
-                >
-                  <Text style={[styles.roleChipText, role === 'admin' && styles.roleChipTextActive]}>Admin</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setRole('d-admin')}
-                  style={[styles.roleChip, role === 'd-admin' && styles.roleChipActive]}
-                  disabled={loading}
-                >
-                  <Text style={[styles.roleChipText, role === 'd-admin' && styles.roleChipTextActive]}>Department Admin</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {role === 'd-admin' ? (
-              <View style={[styles.departmentPicker, { backgroundColor: inputBg, borderColor: border }]}>
-                <Text style={[styles.departmentLabel, { color: textPrimary }]}>Managed Department</Text>
-                <Text style={[styles.departmentHint, { color: muted }]}>Each department can have at most 2 assigned admins.</Text>
-                {departmentsLoading ? (
-                  <ActivityIndicator color={isDark ? '#42A5F5' : '#1976D2'} style={styles.departmentLoading} />
-                ) : (
-                  <View style={styles.departmentChips}>
-                    {departments.map((department) => {
-                      const selected = selectedDepartmentId === department.id;
-                      return (
-                        <TouchableOpacity
-                          key={department.id}
-                          onPress={() => setSelectedDepartmentId(department.id)}
-                          style={[styles.departmentChip, selected && styles.departmentChipActive]}
-                          disabled={loading}
-                        >
-                          <Text style={[styles.departmentChipText, selected && styles.departmentChipTextActive]}>
-                            {department.code}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-                {selectedDepartmentId ? (
-                  <Text style={[styles.departmentSelected, { color: muted }]}>
-                    {departments.find((department) => department.id === selectedDepartmentId)?.name || 'Department selected'}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
 
             <Pressable disabled={loading} onPress={handleSubmit} style={styles.buttonWrap}>
               <LinearGradient colors={['#1976D2', '#42A5F5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryButton}>
@@ -206,13 +102,12 @@ export default function CreateAdminScreen() {
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <View style={styles.buttonContent}>
-                    <Text style={styles.buttonText}>Create admin</Text>
-                    <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.buttonText}>Save admin email</Text>
+                    <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
                   </View>
                 )}
               </LinearGradient>
             </Pressable>
-
           </View>
         </ScrollView>
       </LinearGradient>
@@ -222,34 +117,99 @@ export default function CreateAdminScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  center: { justifyContent: 'center', alignItems: 'center' },
-  scroll: { flexGrow: 1, padding: 24, justifyContent: 'center' },
-  card: { borderRadius: 24, padding: 24, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 6 },
-  header: { alignItems: 'center', marginBottom: 24 },
-  logoCircle: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6, marginBottom: 16 },
-  logoText: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', letterSpacing: 1 },
-  title: { fontSize: 24, fontWeight: '800', letterSpacing: 0.3 },
-  subtitle: { marginTop: 4, fontSize: 14, textAlign: 'center' },
-  inputGroup: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, height: 56, marginBottom: 14 },
-  leadingIcon: { marginRight: 8 },
-  input: { flex: 1, fontSize: 16 },
-  roleSwitch: { flex: 1, flexDirection: 'row', gap: 8 },
-  roleChip: { flex: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: 'rgba(148,163,184,0.16)', alignItems: 'center' },
-  roleChipActive: { backgroundColor: '#1976D2' },
-  roleChipText: { fontSize: 13, fontWeight: '700', color: '#5B7083' },
-  roleChipTextActive: { color: '#FFFFFF' },
-  departmentPicker: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 14 },
-  departmentLabel: { fontSize: 15, fontWeight: '800' },
-  departmentHint: { fontSize: 12, marginTop: 4, marginBottom: 12 },
-  departmentLoading: { marginVertical: 10 },
-  departmentChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  departmentChip: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 999, backgroundColor: 'rgba(148,163,184,0.16)' },
-  departmentChipActive: { backgroundColor: '#1976D2' },
-  departmentChipText: { fontSize: 12, fontWeight: '800', color: '#5B7083' },
-  departmentChipTextActive: { color: '#FFFFFF' },
-  departmentSelected: { marginTop: 12, fontSize: 13, fontWeight: '600' },
-  buttonWrap: { marginTop: 4 },
-  primaryButton: { height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 8 },
-  buttonContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, marginRight: 8 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  restrictedTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  restrictedText: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  scroll: {
+    flexGrow: 1,
+    padding: 20,
+    justifyContent: 'center',
+  },
+  card: {
+    borderWidth: 1,
+    borderRadius: 28,
+    padding: 22,
+    gap: 16,
+    shadowColor: '#06223B',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
+    elevation: 8,
+  },
+  iconShell: {
+    width: 66,
+    height: 66,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '900',
+  },
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: '600',
+  },
+  inputGroup: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  notice: {
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  buttonWrap: {
+    marginTop: 2,
+  },
+  primaryButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+  },
 });

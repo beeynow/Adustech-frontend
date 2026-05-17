@@ -1,4 +1,4 @@
-import type { EventAudience, EventCategory, EventFormat, EventRecord } from '../services/eventsApi';
+import type { EventAudience, EventCategory, EventFormat, EventRecord, EventTicket } from '../services/eventsApi';
 
 export const EVENT_CATEGORY_OPTIONS: Array<{ label: string; value: EventCategory }> = [
   { label: 'Conference', value: 'conference' },
@@ -123,6 +123,26 @@ export const getEventAdmissionLabel = (event: Pick<EventRecord, 'isFree' | 'tick
   return event.isFree ? 'Free entry' : formatEventCurrency(event.ticketPriceCents, event.currency);
 };
 
+const RETRYABLE_PAID_TICKET_STATUSES = new Set([
+  'payment-failed',
+  'payment-cancelled',
+  'payment-expired',
+]);
+
+const SECURE_PAID_TICKET_STATUSES = new Set([
+  'pending',
+  'paid',
+  'checked-in',
+]);
+
+export const isRetryablePaidTicketStatus = (status?: string | null) => {
+  return Boolean(status && RETRYABLE_PAID_TICKET_STATUSES.has(status));
+};
+
+export const canAccessSecurePaidTicket = (ticket?: Pick<EventTicket, 'status'> | null) => {
+  return Boolean(ticket?.status && SECURE_PAID_TICKET_STATUSES.has(ticket.status));
+};
+
 export const getEventSeatLabel = (event: Pick<EventRecord, 'capacity' | 'ticketsSold' | 'ticketsRemaining' | 'isSoldOut'>) => {
   if (event.isSoldOut) {
     return 'Sold out';
@@ -137,4 +157,106 @@ export const getEventSeatLabel = (event: Pick<EventRecord, 'capacity' | 'tickets
     : Math.max(event.capacity - event.ticketsSold, 0);
 
   return `${remaining} of ${event.capacity} left`;
+};
+
+export const getEventTicketStatusLabel = (ticket?: Pick<EventTicket, 'displayStatus' | 'status'> | null) => {
+  if (!ticket) {
+    return 'No ticket';
+  }
+
+  if (ticket.displayStatus) {
+    return ticket.displayStatus;
+  }
+
+  switch (ticket.status) {
+    case 'registered':
+      return 'Reserved';
+    case 'pending':
+      return 'Payment pending';
+    case 'paid':
+      return 'Paid';
+    case 'checked-in':
+      return 'Expired after gate verification';
+    case 'payment-failed':
+      return 'Payment failed';
+    case 'payment-cancelled':
+      return 'Payment cancelled';
+    case 'payment-expired':
+      return 'Payment expired';
+    default:
+      return 'Pending';
+  }
+};
+
+export const getEventTicketStatusTone = (ticket?: Pick<EventTicket, 'status'> | null) => {
+  switch (ticket?.status) {
+    case 'registered':
+      return {
+        accent: '#0F9D58',
+        background: 'rgba(15, 157, 88, 0.12)',
+      };
+    case 'paid':
+      return {
+        accent: '#1976D2',
+        background: 'rgba(25, 118, 210, 0.12)',
+      };
+    case 'checked-in':
+      return {
+        accent: '#7B5C00',
+        background: 'rgba(245, 189, 2, 0.18)',
+      };
+    case 'pending':
+      return {
+        accent: '#8A4B00',
+        background: 'rgba(255, 145, 0, 0.16)',
+      };
+    case 'payment-failed':
+    case 'payment-cancelled':
+    case 'payment-expired':
+      return {
+        accent: '#C62828',
+        background: 'rgba(198, 40, 40, 0.12)',
+      };
+    default:
+      return {
+        accent: '#5F748A',
+        background: 'rgba(95, 116, 138, 0.14)',
+      };
+  }
+};
+
+export const getEventTicketSupportText = (ticket?: EventTicket | null) => {
+  if (!ticket) {
+    return '';
+  }
+
+  if (ticket.status === 'pending') {
+    return 'Complete payment to activate your QR entry pass.';
+  }
+
+  if (ticket.status === 'checked-in') {
+    return 'This paid pass has already been verified at the event gate and is no longer usable.';
+  }
+
+  if (ticket.status === 'payment-expired') {
+    return 'This checkout session expired. Start a fresh payment to reactivate the ticket.';
+  }
+
+  if (ticket.status === 'payment-cancelled') {
+    return 'This payment was cancelled before completion.';
+  }
+
+  if (ticket.status === 'payment-failed') {
+    return 'The previous payment attempt did not complete successfully.';
+  }
+
+  if (ticket.status === 'registered') {
+    return 'Your reserved pass is ready to scan at the venue.';
+  }
+
+  if (ticket.status === 'paid') {
+    return 'Your paid ticket is active and ready for verification.';
+  }
+
+  return '';
 };

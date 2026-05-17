@@ -2,11 +2,13 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import type { Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActionButton, Chip, HeroCard, LoadingState, ScreenShell, SectionHeading } from '@/components/ui/AppChrome';
 import { formatPostCount, formatPostTimeAgo } from '@/components/posts/postUi';
 import { useAuth } from '@/context/AuthContext';
+import { eventsAPI } from '@/services/eventsApi';
 import type { UserProfile } from '@/services/profileApi';
 import { profileAPI } from '@/services/profileApi';
 import { postsAPI } from '@/services/postsApi';
@@ -31,7 +33,7 @@ const ROOM_META: Record<RoomKey, {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route: string;
+  route: Href;
 }> = {
   department: {
     title: 'Department',
@@ -53,9 +55,9 @@ const ROOM_META: Record<RoomKey, {
   },
   events: {
     title: 'Events',
-    subtitle: 'Event announcements and activity posts',
+    subtitle: 'All campus events and category browsing',
     icon: 'megaphone-outline',
-    route: '/events-room',
+    route: '/events',
   },
 };
 
@@ -132,8 +134,30 @@ const buildRoomSummary = async (
       };
     }
 
+    if (key === 'events') {
+      const response = await eventsAPI.list();
+      const latestAt = response.events.reduce((latest, event) => {
+        const candidate = event.updatedAt || event.createdAt || event.startsAt || '';
+        if (!candidate) {
+          return latest;
+        }
+
+        if (!latest) {
+          return candidate;
+        }
+
+        return new Date(candidate).getTime() > new Date(latest).getTime() ? candidate : latest;
+      }, '');
+
+      return {
+        available: true,
+        total: response.events.length,
+        latestAt,
+      };
+    }
+
     const response = await postsAPI.list({
-      category: key === 'timetable' ? 'Timetable' : 'Event',
+      category: 'Timetable',
       limit: 1,
     });
 
@@ -212,7 +236,7 @@ export default function ChannelsPage() {
 
     items.push({ label: `${formatPostCount(
       summaries.department.total + summaries.level.total + summaries.timetable.total + summaries.events.total
-    )} posts`, icon: 'document-text-outline' as const, tone: 'accent' as const });
+    )} updates`, icon: 'document-text-outline' as const, tone: 'accent' as const });
 
     return items;
   }, [profile?.department, profile?.level, summaries.department.total, summaries.events.total, summaries.level.total, summaries.timetable.total]);
@@ -233,8 +257,8 @@ export default function ChannelsPage() {
     <ScreenShell scroll contentContainerStyle={styles.content}>
       <HeroCard
         eyebrow="Rooms"
-        title="A focused hub for academic post rooms"
-        subtitle="Jump straight into the post spaces that matter most to you right now: your department, your class, timetable updates, and events."
+        title="A focused hub for rooms and live events"
+        subtitle="Jump straight into your department, class, timetable updates, and the full campus events experience from one clean hub."
         icon="grid-outline"
         actions={canCreatePosts ? (
           <View style={styles.heroAction}>
@@ -260,7 +284,7 @@ export default function ChannelsPage() {
 
       <SectionHeading
         title="Your Rooms"
-        subtitle="Four dedicated post rooms arranged in a clean 2 by 2 grid."
+        subtitle="Three focused post rooms plus one live event hub arranged in a clean 2 by 2 grid."
       />
 
       {loading ? (
@@ -305,7 +329,7 @@ export default function ChannelsPage() {
 
                   <View style={styles.roomMetaBlock}>
                     <Text style={[styles.roomCount, { color: theme.isDark ? '#F4FAFF' : '#10263C' }]}>
-                      {summary.available ? `${formatPostCount(summary.total)} posts` : 'Profile needed'}
+                      {summary.available ? `${formatPostCount(summary.total)} ${key === 'events' ? 'events' : 'posts'}` : 'Profile needed'}
                     </Text>
                     <Text style={[styles.roomLatest, { color: theme.isDark ? 'rgba(244,250,255,0.78)' : '#4D6883' }]}>
                       {summary.latestAt ? `Latest ${formatPostTimeAgo(summary.latestAt)} ago` : (summary.available ? 'Ready for new updates' : 'Connect this room from your profile')}

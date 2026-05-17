@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import { channelsAPI } from '@/services/channelsApi';

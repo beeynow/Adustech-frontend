@@ -27,7 +27,7 @@ import { useAppTheme } from '../../utils/theme';
 import { PostCard } from '../../components/posts/PostCard';
 import { PostCommentCard } from '../../components/posts/PostCommentCard';
 
-const CATEGORIES = ['All', 'Level', 'Department', 'Exam', 'Timetable', 'Event'] as const;
+const CATEGORIES = ['All', 'Level', 'Department', 'Exam', 'Timetable'] as const;
 
 const mergePosts = (currentPosts: PostItem[], incomingPosts: PostItem[]) => {
   const currentIds = new Set(currentPosts.map((post) => post.id));
@@ -87,9 +87,10 @@ export default function HomeScreen() {
         category: activeCat !== 'All' ? activeCat : undefined,
         q: search || undefined,
       });
+      const visiblePosts = data.posts.filter((post) => post.category !== 'Event');
 
       setPosts((currentPosts) => (
-        append ? mergePosts(currentPosts, data.posts) : data.posts
+        append ? mergePosts(currentPosts, visiblePosts) : visiblePosts
       ));
       setPage(pageToLoad);
       setHasMore(Boolean(data.pagination.hasMore));
@@ -260,6 +261,19 @@ export default function HomeScreen() {
     });
   }, [refreshNotifications]);
 
+  const handleOpenNotification = useCallback((notification: { id: string; actionPath?: string }) => {
+    void markNotificationAsRead(notification.id)
+      .catch(() => {
+        showToast.error('Unable to update that notification right now.');
+      })
+      .finally(() => {
+        setNotificationsVisible(false);
+        if (notification.actionPath) {
+          router.push(notification.actionPath as never);
+        }
+      });
+  }, [markNotificationAsRead, router]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <NotificationModal
@@ -289,6 +303,7 @@ export default function HomeScreen() {
               showToast.error('Unable to clear notifications right now.');
             });
         }}
+        onPressNotification={handleOpenNotification}
       />
 
       <FlatList

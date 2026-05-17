@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import IntegratedChannelRoom from '@/components/channels/IntegratedChannelRoom';
-import integratedChannelsApi from '@/services/integratedChannelsApi';
+import { integratedChannelsApi } from '@/services/integratedChannelsApi';
 
 export default function FacultyChannelScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

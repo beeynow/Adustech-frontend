@@ -6,12 +6,17 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  useColorScheme,
   Animated,
   Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { AppNotification } from '../services/notificationsApi';
+import {
+  formatNotificationTime,
+  getNotificationPresentation,
+  getNotificationScopeLabel,
+} from '../utils/notificationPresentation';
+import { useAppTheme } from '../utils/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +27,7 @@ interface NotificationModalProps {
   onMarkAsRead?: (id: string) => void;
   onMarkAllAsRead?: () => void;
   onClearAll?: () => void;
+  onPressNotification?: (notification: AppNotification) => void;
 }
 
 export default function NotificationModal({
@@ -31,8 +37,9 @@ export default function NotificationModal({
   onMarkAsRead,
   onMarkAllAsRead,
   onClearAll,
+  onPressNotification,
 }: NotificationModalProps) {
-  const isDark = useColorScheme() === 'dark';
+  const theme = useAppTheme();
   const [slideAnim] = useState(new Animated.Value(300));
 
   useEffect(() => {
@@ -53,44 +60,6 @@ export default function NotificationModal({
   }, [slideAnim, visible]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
-
-  const getNotificationIcon = (type: string, customIcon?: string) => {
-    if (customIcon) return customIcon;
-    switch (type) {
-      case 'success': return 'checkmark-circle';
-      case 'warning': return 'warning';
-      case 'error': return 'alert-circle';
-      default: return 'information-circle';
-    }
-  };
-
-  const getNotificationColor = (type: string) => {
-    switch (type) {
-      case 'success': return '#4CAF50';
-      case 'warning': return '#FF9800';
-      case 'error': return '#F44336';
-      default: return isDark ? '#42A5F5' : '#1976D2';
-    }
-  };
-
-  const formatTime = (value: string) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return 'Just now';
-    }
-
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
 
   const getNotificationTitle = (notification: AppNotification) => {
     const title = notification.title.trim();
@@ -127,48 +96,48 @@ export default function NotificationModal({
           style={[
             styles.modalContainer,
             {
-              backgroundColor: isDark ? '#0A1929' : '#FFFFFF',
+              backgroundColor: theme.surfaceStrong,
               transform: [{ translateX: slideAnim }],
             },
           ]}
           onStartShouldSetResponder={() => true}
         >
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(66,165,245,0.2)' : 'rgba(25,118,210,0.1)' }]}>
+          <View style={[styles.header, { borderBottomColor: theme.borderStrong }]}>
             <View style={styles.headerLeft}>
               <Ionicons 
                 name="notifications" 
                 size={24} 
-                color={isDark ? '#42A5F5' : '#1976D2'} 
+                color={theme.accent} 
               />
-              <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>
                 Notifications
               </Text>
               {unreadCount > 0 && (
-                <View style={[styles.badge, { backgroundColor: '#F44336' }]}>
+                <View style={[styles.badge, { backgroundColor: theme.danger }]}>
                   <Text style={styles.badgeText}>{unreadCount}</Text>
                 </View>
               )}
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={isDark ? '#90CAF9' : '#546E7A'} />
+              <Ionicons name="close" size={24} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
           {/* Action Buttons */}
           {notifications.length > 0 && (
-            <View style={[styles.actions, { borderBottomColor: isDark ? 'rgba(66,165,245,0.2)' : 'rgba(25,118,210,0.1)' }]}>
+            <View style={[styles.actions, { borderBottomColor: theme.borderStrong }]}>
               {unreadCount > 0 && (
                 <TouchableOpacity onPress={onMarkAllAsRead} style={styles.actionButton}>
-                  <Ionicons name="checkmark-done" size={16} color={isDark ? '#42A5F5' : '#1976D2'} />
-                  <Text style={[styles.actionText, { color: isDark ? '#42A5F5' : '#1976D2' }]}>
+                  <Ionicons name="checkmark-done" size={16} color={theme.accent} />
+                  <Text style={[styles.actionText, { color: theme.accent }]}>
                     Mark all read
                   </Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={onClearAll} style={styles.actionButton}>
-                <Ionicons name="trash-outline" size={16} color={isDark ? '#F48FB1' : '#C2185B'} />
-                <Text style={[styles.actionText, { color: isDark ? '#F48FB1' : '#C2185B' }]}>
+                <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                <Text style={[styles.actionText, { color: theme.danger }]}>
                   Clear all
                 </Text>
               </TouchableOpacity>
@@ -189,70 +158,90 @@ export default function NotificationModal({
                 <Ionicons 
                   name="notifications-off-outline" 
                   size={64} 
-                  color={isDark ? '#546E7A' : '#B0BEC5'} 
+                  color={theme.textSoft} 
                 />
-                <Text style={[styles.emptyTitle, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
+                <Text style={[styles.emptyTitle, { color: theme.textMuted }]}>
                   No notifications
                 </Text>
-                <Text style={[styles.emptySubtitle, { color: isDark ? '#546E7A' : '#B0BEC5' }]}>
+                <Text style={[styles.emptySubtitle, { color: theme.textSoft }]}>
                   You&apos;re all caught up!
                 </Text>
               </View>
             ) : (
-              notifications.map((notification) => (
-                <TouchableOpacity
-                  key={notification.id}
-                  style={[
-                    styles.notificationItem,
-                    {
-                      backgroundColor: notification.read 
-                        ? 'transparent' 
-                        : (isDark ? 'rgba(66,165,245,0.08)' : 'rgba(25,118,210,0.05)'),
-                      borderBottomColor: isDark ? 'rgba(66,165,245,0.1)' : 'rgba(25,118,210,0.08)',
-                    },
-                  ]}
-                  onPress={() => onMarkAsRead?.(notification.id)}
-                >
-                  <View 
+              notifications.map((notification) => {
+                const presentation = getNotificationPresentation(notification, theme);
+
+                return (
+                  <TouchableOpacity
+                    key={notification.id}
                     style={[
-                      styles.notificationIconContainer,
-                      { backgroundColor: getNotificationColor(notification.type) + '15' },
+                      styles.notificationItem,
+                      {
+                        backgroundColor: notification.read ? 'transparent' : presentation.soft,
+                        borderBottomColor: theme.border,
+                      },
                     ]}
+                    onPress={() => {
+                      if (onPressNotification) {
+                        onPressNotification(notification);
+                        return;
+                      }
+
+                      onMarkAsRead?.(notification.id);
+                    }}
                   >
-                    <Ionicons 
-                      name={getNotificationIcon(notification.type, notification.icon) as any}
-                      size={24} 
-                      color={getNotificationColor(notification.type)} 
-                    />
-                  </View>
-                  <View style={styles.notificationContent}>
-                    <View style={styles.notificationHeader}>
-                      <Text 
-                        style={[
-                          styles.notificationTitle,
-                          { color: isDark ? '#FFFFFF' : '#0A1929' },
-                          !notification.read && styles.notificationTitleUnread,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {getNotificationTitle(notification)}
-                      </Text>
-                      {!notification.read && (
-                        <View style={styles.unreadDot} />
-                      )}
-                    </View>
-                    <Text 
-                      style={[styles.notificationMessage, { color: isDark ? '#90CAF9' : '#546E7A' }]}
-                      numberOfLines={2}
+                    <View
+                      style={[
+                        styles.notificationIconContainer,
+                        { backgroundColor: presentation.soft },
+                      ]}
                     >
-                      {getNotificationMessage(notification)}
-                    </Text>
-                    <Text style={[styles.notificationTime, { color: isDark ? '#546E7A' : '#B0BEC5' }]}>
-                      {formatTime(notification.timestamp)}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))
+                      <Ionicons
+                        name={presentation.icon}
+                        size={22}
+                        color={presentation.accent}
+                      />
+                    </View>
+                    <View style={styles.notificationContent}>
+                      <View style={styles.notificationHeader}>
+                        <Text
+                          style={[
+                            styles.notificationTitle,
+                            { color: theme.text },
+                            !notification.read && styles.notificationTitleUnread,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {getNotificationTitle(notification)}
+                        </Text>
+                        {!notification.read ? (
+                          <View style={[styles.unreadDot, { backgroundColor: presentation.accent }]} />
+                        ) : null}
+                      </View>
+                      <View style={styles.metaRow}>
+                        <Text style={[styles.metaPill, { color: presentation.accent, backgroundColor: presentation.soft }]}>
+                          {presentation.label}
+                        </Text>
+                        <Text style={[styles.metaPill, { color: theme.textMuted, backgroundColor: theme.surface }]}>
+                          {getNotificationScopeLabel(notification)}
+                        </Text>
+                        {notification.actionPath ? (
+                          <Text style={[styles.metaHint, { color: theme.textSoft }]}>Tap to open</Text>
+                        ) : null}
+                      </View>
+                      <Text
+                        style={[styles.notificationMessage, { color: theme.textMuted }]}
+                        numberOfLines={2}
+                      >
+                        {getNotificationMessage(notification)}
+                      </Text>
+                      <Text style={[styles.notificationTime, { color: theme.textSoft }]}>
+                        {formatNotificationTime(notification.timestamp)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
             )}
           </ScrollView>
         </Animated.View>
@@ -373,6 +362,24 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  metaPill: {
+    fontSize: 11,
+    fontWeight: '800',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  metaHint: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
   notificationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -390,7 +397,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#42A5F5',
     marginLeft: 8,
   },
   notificationMessage: {

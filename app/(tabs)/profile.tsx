@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [autoSave, setAutoSave] = useState(true);
-  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -314,7 +314,7 @@ export default function ProfileScreen() {
     );
   }
 
-  const headerGradient = isDark ? ['#06152A', '#0C2A4F'] : ['#1D4ED8', '#3B82F6'];
+  const headerGradient: [string, string] = isDark ? ['#06152A', '#0C2A4F'] : ['#1D4ED8', '#3B82F6'];
   const appBg = isDark ? '#06152A' : '#EEF4FF';
   const cardBg = isDark ? '#0D223D' : '#FFFFFF';
   const textPrimary = isDark ? '#ECF3FF' : '#0F172A';
@@ -363,7 +363,7 @@ export default function ProfileScreen() {
 
           <View style={styles.heroActions}>
             <TouchableOpacity
-              onPress={() => router.push('/settings')}
+              onPress={() => router.push('/settings' as never)}
               style={styles.settingsIconButton}
               activeOpacity={0.85}
             >
