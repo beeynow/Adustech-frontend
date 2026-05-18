@@ -43,7 +43,6 @@
     },
     "android": {
       "package": "com.adustech.app",
-      "versionCode": 1,
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -148,8 +147,7 @@
         "projectId": "2143ecce-ea16-4906-8116-366fc71b76fc"
       }
     },
-    "runtimeVersion": "1.0.0"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/b2281a15-9a91-420f-8129-4348b0de616d"
     }
