@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Platform,
   ScrollView,
   Share,
@@ -473,7 +474,14 @@ export default function HomeScreen() {
         )}
       />
 
-      {commentsVisible ? (
+      <Modal
+        visible={commentsVisible}
+        transparent
+        animationType="slide"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        onRequestClose={() => setCommentsVisible(false)}
+      >
         <View style={styles.sheetOverlay}>
           <View
             style={[
@@ -579,7 +587,7 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
-      ) : null}
+      </Modal>
     </View>
   );
 }

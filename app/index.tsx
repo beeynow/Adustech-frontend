@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -45,7 +45,7 @@ export default function Index() {
         <Animated.View entering={FadeInDown.duration(500)} style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
           <Animated.View entering={FadeInUp.delay(90).duration(420)} style={styles.heroBadge}>
             <View style={[styles.logoCircle, { backgroundColor: isDark ? '#3B82F6' : '#1976D2' }]}>
-              <Text style={styles.logoText}>AT</Text>
+              <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
             </View>
             <View style={styles.statusPill}>
               <Ionicons name="sparkles" size={14} color="#0B5CAD" />
@@ -156,11 +156,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 38,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+  logoImage: {
+    width: 64,
+    height: 64,
   },
   statusPill: {
     flexDirection: 'row',

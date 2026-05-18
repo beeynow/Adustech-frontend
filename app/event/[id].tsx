@@ -209,6 +209,12 @@ export default function EventDetailScreen() {
             status: typeof parsed.queryParams?.status === 'string' ? parsed.queryParams.status : '',
             reference: typeof parsed.queryParams?.reference === 'string' ? parsed.queryParams.reference : '',
             trxref: typeof parsed.queryParams?.trxref === 'string' ? parsed.queryParams.trxref : '',
+            transactionId:
+              typeof parsed.queryParams?.transaction_id === 'string'
+                ? parsed.queryParams.transaction_id
+                : typeof parsed.queryParams?.transactionId === 'string'
+                  ? parsed.queryParams.transactionId
+                  : '',
           },
         });
         return;

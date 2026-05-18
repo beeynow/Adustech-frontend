@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme } from 'react-native';
+import { Image, View, Text, StyleSheet, useColorScheme } from 'react-native';
 
 export default function Logo() {
   const colorScheme = useColorScheme();
@@ -8,9 +8,7 @@ export default function Logo() {
   return (
     <View style={styles.container}>
       <View style={[styles.logoCircle, isDark ? styles.logoDark : styles.logoLight]}>
-        <Text style={[styles.logoText, isDark ? styles.textDark : styles.textLight]}>
-          AT
-        </Text>
+        <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
       </View>
       <Text style={[styles.brandName, isDark ? styles.textDark : styles.textLight]}>
         ADUSTECH
@@ -49,10 +47,9 @@ const styles = StyleSheet.create({
   logoDark: {
     backgroundColor: '#42A5F5',
   },
-  logoText: {
-    fontSize: 72,
-    fontWeight: 'bold',
-    letterSpacing: 2,
+  logoImage: {
+    width: 118,
+    height: 118,
   },
   textLight: {
     color: '#FFFFFF',

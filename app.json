@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Adustech Tech",
-    "slug": "adustech-tech",
+    "slug": "adustech",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -105,7 +105,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png",
+      "favicon": "./assets/images/icon.png",
       "splash": {
         "image": "./assets/images/plash.png",
         "resizeMode": "contain",
@@ -130,11 +130,12 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/android-icon-monochrome.png",
+          "icon": "./assets/images/icon.png",
           "color": "#1976D2"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -144,7 +145,7 @@
       "apiBaseUrl": "https://adustech-backend.vercel.app",
       "router": {},
       "eas": {
-        "projectId": "b2281a15-9a91-420f-8129-4348b0de616d"
+        "projectId": "2143ecce-ea16-4906-8116-366fc71b76fc"
       }
     },
     "runtimeVersion": {

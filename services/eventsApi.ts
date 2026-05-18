@@ -169,6 +169,7 @@ export interface ConfirmPaystackPaymentResponse {
   event: EventRecord;
   ticket: EventTicket;
   requiresPayment: boolean;
+  confirmationPending?: boolean;
 }
 
 export interface VerifyEventTicketPayload {
