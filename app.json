@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "primaryColor": "#1976D2",
     "newArchEnabled": true,
-    "owner": "adustech",
+    "owner": "tryinterview",
     "description": "Official mobile app for Adustech - Connect, learn, and stay updated with your university community.",
     "githubUrl": "https://github.com/adustech/adustech-app",
     "splash": {
@@ -142,14 +142,8 @@
     },
     "extra": {
       "apiBaseUrl": "https://adustech-backend.vercel.app",
-      "router": {},
-      "eas": {
-        "projectId": "2143ecce-ea16-4906-8116-366fc71b76fc"
-      }
+      "router": {}
     },
-    "runtimeVersion": "1.0.0",
-    "updates": {
-      "url": "https://u.expo.dev/b2281a15-9a91-420f-8129-4348b0de616d"
-    }
+    "runtimeVersion": "1.0.0"
   }
 }
