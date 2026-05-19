@@ -45,6 +45,7 @@ export const profileAPI = {
         success: false,
         message: error.response?.data?.errors?.[0]?.msg
           || error.response?.data?.message
+          || error.response?.data?.error
           || 'Failed to update profile',
       };
     }

@@ -9,6 +9,7 @@ import QRCode from 'react-native-qrcode-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as ExpoLinking from 'expo-linking';
 import { usePreventScreenCapture } from 'expo-screen-capture';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { eventsAPI, type EventRecord } from '../../services/eventsApi';
 import { showToast } from '../../utils/toast';
 import {
@@ -52,6 +53,7 @@ export default function PaidTicketScreen() {
   const params = useLocalSearchParams<{ eventId?: string | string[] }>();
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
 
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,6 +168,9 @@ export default function PaidTicketScreen() {
 
     return (
       <LinearGradient colors={palette.page} style={styles.centered}>
+        <TouchableOpacity style={[styles.circleButton, styles.centerBackButton, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={18} color={palette.accent} />
+        </TouchableOpacity>
         <Text style={[styles.emptyTitle, { color: palette.text }]}>Paid ticket not available</Text>
         <Text style={[styles.emptySubtitle, { color: palette.subtext }]}>
           {hasFailedOrExpiredPurchase
@@ -195,7 +200,7 @@ export default function PaidTicketScreen() {
 
   return (
     <LinearGradient colors={palette.page} style={styles.flex}>
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.flex} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top + 12, 34) }]}>
         <View style={styles.topRow}>
           <TouchableOpacity style={[styles.circleButton, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={18} color={palette.accent} />
@@ -290,6 +295,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 12,
   },
+  centerBackButton: {
+    marginBottom: 4,
+  },
   loadingText: {
     fontSize: 15,
     fontWeight: '600',
@@ -306,7 +314,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 30,
     paddingBottom: 42,
     gap: 14,
   },

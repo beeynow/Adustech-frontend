@@ -36,9 +36,12 @@ export default function LoginScreen() {
       const result = await login(normalizedEmail, password);
 
       if (!result.success) {
-        if (result.message?.includes('verify')) {
+        if (result.requiresVerification || result.message?.includes('verify')) {
           showToast.warning('Your account still needs email verification.');
-          router.push({ pathname: '/verify-otp' as any, params: { email: normalizedEmail } });
+          router.push({
+            pathname: '/verify-otp' as any,
+            params: { email: result.pendingEmail || normalizedEmail },
+          });
           return;
         }
 

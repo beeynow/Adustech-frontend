@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 22,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 10,
@@ -569,6 +569,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     justifyContent: 'center',
+    marginBottom: 6,
   },
   composerInput: {
     fontSize: 15,
@@ -581,5 +582,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 6,
   },
 });

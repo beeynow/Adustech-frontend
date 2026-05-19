@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { normalizeNotification, notificationsAPI, type AppNotification } from './notificationsApi';
 
 const PUSH_TOKEN_STORAGE_KEY = 'push_notification_token';
 export const PUSH_NOTIFICATION_CHANNEL_ID = 'campus-alerts';
+type ExpoNotificationsModule = typeof import('expo-notifications');
 
 type ExpoExtraConfig = {
   eas?: {
@@ -13,14 +13,64 @@ type ExpoExtraConfig = {
   };
 };
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+let hasConfiguredNotificationHandler = false;
+let hasWarnedUnsupportedPushRuntime = false;
+
+const isExpoGoAndroid = () => {
+  const constantRecord = Constants as typeof Constants & {
+    appOwnership?: string;
+    executionEnvironment?: string;
+  };
+
+  return Platform.OS === 'android' && (
+    constantRecord.appOwnership === 'expo'
+    || constantRecord.executionEnvironment === 'storeClient'
+  );
+};
+
+const warnUnsupportedPushRuntime = () => {
+  if (hasWarnedUnsupportedPushRuntime) {
+    return;
+  }
+
+  hasWarnedUnsupportedPushRuntime = true;
+  console.warn(
+    'Push notifications are disabled in Expo Go on Android. Use a development build to test remote notifications.'
+  );
+};
+
+const ensureNotificationHandlerConfigured = (Notifications: ExpoNotificationsModule) => {
+  if (hasConfiguredNotificationHandler) {
+    return;
+  }
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+
+  hasConfiguredNotificationHandler = true;
+};
+
+export const getExpoNotificationsModule = (): ExpoNotificationsModule | null => {
+  if (isExpoGoAndroid()) {
+    warnUnsupportedPushRuntime();
+    return null;
+  }
+
+  try {
+    const Notifications = require('expo-notifications') as ExpoNotificationsModule;
+    ensureNotificationHandlerConfigured(Notifications);
+    return Notifications;
+  } catch (error) {
+    console.warn('Failed to load expo-notifications runtime', error);
+    return null;
+  }
+};
 
 const getProjectId = () => {
   const extra = Constants.expoConfig?.extra as ExpoExtraConfig | undefined;
@@ -41,6 +91,12 @@ const readPushData = (value: unknown): Record<string, unknown> => {
 };
 
 export const ensurePushNotificationChannelAsync = async () => {
+  const Notifications = getExpoNotificationsModule();
+
+  if (!Notifications) {
+    return;
+  }
+
   if (Platform.OS !== 'android') {
     return;
   }
@@ -59,6 +115,12 @@ export const ensurePushNotificationChannelAsync = async () => {
 };
 
 export const registerCurrentDeviceForPushAsync = async () => {
+  const Notifications = getExpoNotificationsModule();
+
+  if (!Notifications) {
+    return null;
+  }
+
   await ensurePushNotificationChannelAsync();
 
   const currentPermissions = await Notifications.getPermissionsAsync();

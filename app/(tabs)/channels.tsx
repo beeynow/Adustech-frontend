@@ -12,15 +12,17 @@ import { eventsAPI } from '@/services/eventsApi';
 import type { UserProfile } from '@/services/profileApi';
 import { profileAPI } from '@/services/profileApi';
 import { postsAPI } from '@/services/postsApi';
+import { referralsAPI } from '@/services/referralsApi';
 import { showToast } from '@/utils/toast';
 import { useAppTheme } from '@/utils/theme';
 
-type RoomKey = 'department' | 'level' | 'timetable' | 'events';
+type RoomKey = 'department' | 'level' | 'timetable' | 'events' | 'referrals';
 
 type RoomSummary = {
   available: boolean;
   total: number;
   latestAt: string;
+  headline?: string;
 };
 
 const EMPTY_SUMMARY: RoomSummary = {
@@ -59,6 +61,12 @@ const ROOM_META: Record<RoomKey, {
     icon: 'megaphone-outline',
     route: '/events',
   },
+  referrals: {
+    title: 'Invites',
+    subtitle: 'Your referral code, invite links, and verified signup points',
+    icon: 'gift-outline',
+    route: '/invites',
+  },
 };
 
 const getRoomGradient = (key: RoomKey, isDark: boolean): [string, string] => {
@@ -72,6 +80,10 @@ const getRoomGradient = (key: RoomKey, isDark: boolean): [string, string] => {
 
   if (key === 'timetable') {
     return isDark ? ['rgba(12, 45, 79, 0.96)', 'rgba(28, 112, 196, 0.92)'] : ['#EEF7FF', '#CFE6FF'];
+  }
+
+  if (key === 'referrals') {
+    return isDark ? ['rgba(41, 20, 66, 0.98)', 'rgba(121, 49, 170, 0.92)'] : ['#FFF3E9', '#FFD6AE'];
   }
 
   return isDark ? ['rgba(8, 58, 45, 0.96)', 'rgba(16, 148, 107, 0.9)'] : ['#EAFBF5', '#BFEEDC'];
@@ -88,6 +100,10 @@ const getRoomAccent = (key: RoomKey, theme: ReturnType<typeof useAppTheme>) => {
 
   if (key === 'timetable') {
     return theme.accent;
+  }
+
+  if (key === 'referrals') {
+    return '#B45B00';
   }
 
   return theme.success;
@@ -156,6 +172,19 @@ const buildRoomSummary = async (
       };
     }
 
+    if (key === 'referrals') {
+      const response = await referralsAPI.getOverview();
+      const latestHistory = response.history.find((item) => item.status === 'completed') || response.history[0];
+      const latestAt = latestHistory?.completedAt || latestHistory?.createdAt || '';
+
+      return {
+        available: true,
+        total: response.summary.points,
+        latestAt,
+        headline: `${response.summary.completedReferrals} verified • ${response.summary.points} points`,
+      };
+    }
+
     const response = await postsAPI.list({
       category: 'Timetable',
       limit: 1,
@@ -166,10 +195,10 @@ const buildRoomSummary = async (
       total: response.pagination.total,
       latestAt: response.posts[0]?.createdAt || '',
     };
-  } catch {
-    return {
-      ...EMPTY_SUMMARY,
-      available: key === 'timetable' || key === 'events',
+    } catch {
+      return {
+        ...EMPTY_SUMMARY,
+      available: key === 'timetable' || key === 'events' || key === 'referrals',
     };
   }
 };
@@ -185,6 +214,7 @@ export default function ChannelsPage() {
     level: EMPTY_SUMMARY,
     timetable: EMPTY_SUMMARY,
     events: EMPTY_SUMMARY,
+    referrals: EMPTY_SUMMARY,
   });
 
   const canCreatePosts = ['power', 'admin', 'd-admin'].includes(user?.role || '');
@@ -238,8 +268,10 @@ export default function ChannelsPage() {
       summaries.department.total + summaries.level.total + summaries.timetable.total + summaries.events.total
     )} updates`, icon: 'document-text-outline' as const, tone: 'accent' as const });
 
+    items.push({ label: `${summaries.referrals.total || 0} referral points`, icon: 'gift-outline' as const, tone: 'warning' as const });
+
     return items;
-  }, [profile?.department, profile?.level, summaries.department.total, summaries.events.total, summaries.level.total, summaries.timetable.total]);
+  }, [profile?.department, profile?.level, summaries.department.total, summaries.events.total, summaries.level.total, summaries.referrals.total, summaries.timetable.total]);
 
   const handleOpenRoom = (key: RoomKey) => {
     const room = ROOM_META[key];
@@ -258,7 +290,7 @@ export default function ChannelsPage() {
       <HeroCard
         eyebrow="Rooms"
         title="A focused hub for rooms and live events"
-        subtitle="Jump straight into your department, class, timetable updates, and the full campus events experience from one clean hub."
+        subtitle="Jump straight into your department, class, timetable updates, events, and invite rewards from one clean hub."
         icon="grid-outline"
         actions={canCreatePosts ? (
           <View style={styles.heroAction}>
@@ -284,7 +316,7 @@ export default function ChannelsPage() {
 
       <SectionHeading
         title="Your Rooms"
-        subtitle="Three focused post rooms plus one live event hub arranged in a clean 2 by 2 grid."
+        subtitle="Four core campus rooms plus a dedicated invite and referral hub."
       />
 
       {loading ? (
@@ -305,10 +337,11 @@ export default function ChannelsPage() {
                 onPress={() => handleOpenRoom(key)}
                 style={({ pressed }) => [
                   styles.roomCardPressable,
+                  key === 'referrals' && styles.roomCardPressableWide,
                   pressed && styles.roomCardPressed,
                 ]}
               >
-                <LinearGradient colors={gradient} style={[styles.roomCard, { borderColor: theme.borderStrong }]}>
+                <LinearGradient colors={gradient} style={[styles.roomCard, key === 'referrals' && styles.roomCardWide, { borderColor: theme.borderStrong }]}>
                   <View style={styles.roomCardTop}>
                     <View style={[styles.roomIconWrap, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.78)' }]}>
                       <Ionicons name={room.icon} size={20} color={accent} />
@@ -329,10 +362,22 @@ export default function ChannelsPage() {
 
                   <View style={styles.roomMetaBlock}>
                     <Text style={[styles.roomCount, { color: theme.isDark ? '#F4FAFF' : '#10263C' }]}>
-                      {summary.available ? `${formatPostCount(summary.total)} ${key === 'events' ? 'events' : 'posts'}` : 'Profile needed'}
+                      {summary.available
+                        ? key === 'events'
+                          ? `${formatPostCount(summary.total)} events`
+                          : key === 'referrals'
+                            ? summary.headline || `${summary.total} points`
+                            : `${formatPostCount(summary.total)} posts`
+                        : 'Profile needed'}
                     </Text>
                     <Text style={[styles.roomLatest, { color: theme.isDark ? 'rgba(244,250,255,0.78)' : '#4D6883' }]}>
-                      {summary.latestAt ? `Latest ${formatPostTimeAgo(summary.latestAt)} ago` : (summary.available ? 'Ready for new updates' : 'Connect this room from your profile')}
+                      {key === 'referrals'
+                        ? summary.latestAt
+                          ? `Latest verified ${formatPostTimeAgo(summary.latestAt)} ago`
+                          : (summary.available ? 'Share your code to start earning points' : 'Open your referral center')
+                        : summary.latestAt
+                          ? `Latest ${formatPostTimeAgo(summary.latestAt)} ago`
+                          : (summary.available ? 'Ready for new updates' : 'Connect this room from your profile')}
                     </Text>
                   </View>
                 </LinearGradient>
@@ -373,6 +418,9 @@ const styles = StyleSheet.create({
   roomCardPressable: {
     width: '48.2%',
   },
+  roomCardPressableWide: {
+    width: '100%',
+  },
   roomCardPressed: {
     opacity: 0.95,
   },
@@ -383,6 +431,9 @@ const styles = StyleSheet.create({
     padding: 16,
     justifyContent: 'space-between',
     overflow: 'hidden',
+  },
+  roomCardWide: {
+    minHeight: 188,
   },
   roomCardTop: {
     flexDirection: 'row',

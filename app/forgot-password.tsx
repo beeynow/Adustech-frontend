@@ -37,7 +37,13 @@ export default function ForgotPasswordScreen() {
       }
 
       showToast.success(res.message || 'A reset code has been sent if the email exists.');
-      router.push('/reset-password');
+      router.push({
+        pathname: '/reset-password' as any,
+        params: {
+          ...(res.debugResetToken ? { debugResetToken: res.debugResetToken } : {}),
+          ...(res.mailPreviewUrl ? { mailPreviewUrl: res.mailPreviewUrl } : {}),
+        },
+      });
     } finally {
       setLoading(false);
     }

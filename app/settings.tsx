@@ -43,8 +43,12 @@ export default function SettingsScreen() {
             <Text style={styles.infoLabel}>Runtime</Text>
             <Text style={styles.infoTitle}>{runtime.environment}</Text>
             <Text style={styles.infoText}>Backend: {runtime.apiBaseUrl}</Text>
+            <Text style={styles.infoText}>Mode: {runtime.apiResolutionMode}</Text>
+            {runtime.localDevApiBaseUrl ? (
+              <Text style={styles.infoText}>Local fallback: {runtime.localDevApiBaseUrl}</Text>
+            ) : null}
             <Text style={styles.infoHint}>
-              This helps confirm which backend the app is currently targeting.
+              This helps confirm which backend the app is currently targeting while you test.
             </Text>
           </View>
 

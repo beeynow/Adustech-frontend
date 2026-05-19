@@ -4,6 +4,7 @@ import { authAPI } from '../services/api';
 import { unregisterCurrentDeviceForPushAsync } from '../services/pushNotifications';
 import type { UserRole } from '../utils/permissions';
 import { normalizeEmail } from '../utils/validation';
+import { clearPendingReferralCode, normalizeReferralCode } from '../utils/referrals';
 
 interface User {
   name: string;
@@ -15,18 +16,37 @@ type AuthEmailResult = {
   success: boolean;
   message?: string;
   debugOtp?: string;
+  debugResetToken?: string;
   mailPreviewUrl?: string;
+  status?: number;
+};
+
+type LoginResult = {
+  success: boolean;
+  message?: string;
+  requiresVerification?: boolean;
+  pendingEmail?: string;
+};
+
+type VerifyOtpResult = {
+  success: boolean;
+  message?: string;
+  referral?: {
+    applied: boolean;
+    pointsAwarded: number;
+    referrerName: string;
+  } | null;
 };
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  register: (name: string, email: string, password: string) => Promise<AuthEmailResult>;
-  verifyOTP: (email: string, otp: string) => Promise<{ success: boolean; message?: string }>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  register: (name: string, email: string, password: string, referralCode?: string) => Promise<AuthEmailResult>;
+  verifyOTP: (email: string, otp: string) => Promise<VerifyOtpResult>;
   resendOTP: (email: string) => Promise<AuthEmailResult>;
-  forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
+  forgotPassword: (email: string) => Promise<AuthEmailResult>;
   resetPassword: (email: string, token: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   refreshSession: () => Promise<boolean>;
@@ -77,14 +97,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       STORAGE_KEYS.pendingEmail,
       STORAGE_KEYS.resetEmail,
     ]);
+    await clearPendingReferralCode();
   };
 
   const refreshSession = async (): Promise<boolean> => {
     const me = await authAPI.me();
     if (!me.success) {
-      startTransition(() => setUser(null));
-      await AsyncStorage.removeItem(STORAGE_KEYS.user);
-      return false;
+      if (me.status === 401 || me.status === 403) {
+        startTransition(() => setUser(null));
+        await clearAuthStorage();
+        return false;
+      }
+
+      return Boolean(user);
     }
 
     const hydratedUser = parseUserFromMeResponse(me.data);
@@ -128,11 +153,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuthStatus();
   }, []);
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, password: string, referralCode?: string) => {
     const normalizedEmail = normalizeEmail(email);
-    const result = await authAPI.register(name.trim(), normalizedEmail, password);
+    const normalizedReferralCode = referralCode ? normalizeReferralCode(referralCode) : '';
+    const result = await authAPI.register(name.trim(), normalizedEmail, password, normalizedReferralCode || undefined);
     if (result.success) {
       await AsyncStorage.setItem(STORAGE_KEYS.pendingEmail, normalizedEmail);
+      if (normalizedReferralCode) {
+        await clearPendingReferralCode();
+      }
       return {
         success: true,
         message: result.data?.message,
@@ -140,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         mailPreviewUrl: result.data?.delivery?.previewUrl,
       };
     }
-    return { success: false, message: result.message };
+    return { success: false, message: result.message, status: result.status };
   };
 
   const verifyOTP = async (email: string, otp: string) => {
@@ -148,7 +177,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const result = await authAPI.verifyOTP(normalizedEmail, otp.trim());
     if (result.success) {
       await AsyncStorage.removeItem(STORAGE_KEYS.pendingEmail);
-      return { success: true, message: result.data.message };
+      return {
+        success: true,
+        message: result.data.message,
+        referral: result.data.referral || null,
+      };
     }
     return { success: false, message: result.message };
   };
@@ -178,13 +211,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       startTransition(() => setUser(mappedUser));
       await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
+      await AsyncStorage.removeItem(STORAGE_KEYS.pendingEmail);
       return { success: true, message: result.data.message };
     }
 
-    if (result.message?.includes('Email not verified') || result.message?.includes('verify OTP')) {
-      await AsyncStorage.setItem(STORAGE_KEYS.pendingEmail, normalizedEmail);
+    if (result.requiresVerification || result.message?.includes('Email not verified') || result.message?.includes('verify OTP')) {
+      await AsyncStorage.setItem(STORAGE_KEYS.pendingEmail, result.pendingEmail || normalizedEmail);
     }
-    return { success: false, message: result.message };
+    return {
+      success: false,
+      message: result.message,
+      requiresVerification: result.requiresVerification,
+      pendingEmail: result.pendingEmail,
+    };
   };
 
   const logout = async () => {
@@ -204,9 +243,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const result = await authAPI.forgotPassword(normalizedEmail);
     if (result.success) {
       await AsyncStorage.setItem(STORAGE_KEYS.resetEmail, normalizedEmail);
-      return { success: true, message: result.data.message };
+      return {
+        success: true,
+        message: result.data.message,
+        debugResetToken: result.data?.debug?.resetToken,
+        mailPreviewUrl: result.data?.delivery?.previewUrl,
+      };
     }
-    return { success: false, message: result.message };
+    return {
+      success: false,
+      message: result.message,
+      status: result.status,
+      debugResetToken: (result.details as any)?.debug?.resetToken,
+      mailPreviewUrl: (result.details as any)?.delivery?.previewUrl,
+    };
   };
 
   const resetPassword = async (email: string, token: string, newPassword: string) => {

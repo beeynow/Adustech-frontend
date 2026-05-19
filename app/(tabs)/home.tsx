@@ -828,7 +828,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderTopWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -840,6 +841,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 14,
     justifyContent: 'center',
+    marginBottom: 6,
   },
   sheetInput: {
     fontSize: 15,
@@ -851,5 +853,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 6,
   },
 });

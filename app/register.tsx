@@ -1,18 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { AuthScaffold, authInputColors, authTypography } from '../components/auth/AuthScaffold';
 import { showToast } from '../utils/toast';
 import { getPasswordValidationErrors, isValidEmail, normalizeEmail } from '../utils/validation';
+import { formatReferralCode, getPendingReferralCode, normalizeReferralCode, storePendingReferralCode } from '../utils/referrals';
 
 export default function RegisterScreen() {
+  const params = useLocalSearchParams<{ referralCode?: string; referrerName?: string }>();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,9 +25,37 @@ export default function RegisterScreen() {
   const colors = authInputColors(isDark);
 
   const passwordErrors = useMemo(() => getPasswordValidationErrors(password), [password]);
+  const referrerName = typeof params.referrerName === 'string' ? params.referrerName.trim() : '';
+
+  useEffect(() => {
+    let mounted = true;
+
+    const hydrateReferralCode = async () => {
+      const fromParams = typeof params.referralCode === 'string'
+        ? normalizeReferralCode(params.referralCode)
+        : '';
+
+      if (fromParams) {
+        await storePendingReferralCode(fromParams);
+      }
+
+      const savedCode = fromParams || await getPendingReferralCode();
+
+      if (mounted && savedCode) {
+        setReferralCode(savedCode);
+      }
+    };
+
+    void hydrateReferralCode();
+
+    return () => {
+      mounted = false;
+    };
+  }, [params.referralCode]);
 
   const handleRegister = async () => {
     const normalizedEmail = normalizeEmail(email);
+    const normalizedReferralCode = normalizeReferralCode(referralCode);
 
     if (!name.trim() || !normalizedEmail || !password || !confirmPassword) {
       showToast.warning('Complete every field before creating your account.');
@@ -51,9 +82,18 @@ export default function RegisterScreen() {
       return;
     }
 
+    if (normalizedReferralCode && normalizedReferralCode.length < 6) {
+      showToast.error('Use the full referral code before continuing.', 'Invalid Referral');
+      return;
+    }
+
+    if (normalizedReferralCode) {
+      await storePendingReferralCode(normalizedReferralCode);
+    }
+
     setLoading(true);
     try {
-      const result = await register(name.trim(), normalizedEmail, password);
+      const result = await register(name.trim(), normalizedEmail, password, normalizedReferralCode || undefined);
       if (!result.success) {
         showToast.error(result.message || 'We could not create your account yet.', 'Registration Failed');
         return;
@@ -68,6 +108,7 @@ export default function RegisterScreen() {
         pathname: '/verify-otp' as any,
         params: {
           email: normalizedEmail,
+          ...(normalizedReferralCode ? { referralCode: normalizedReferralCode } : {}),
           ...(result.debugOtp ? { debugOtp: result.debugOtp } : {}),
           ...(result.mailPreviewUrl ? { mailPreviewUrl: result.mailPreviewUrl } : {}),
         },
@@ -83,9 +124,21 @@ export default function RegisterScreen() {
       title="Create your account"
       subtitle="Join the modern ADUSTECH experience with secure verification and role-aware access."
       helper={(
-        <Text style={[authTypography.helperText, { color: colors.muted }]}>
-          Strong passwords and email verification help keep your notices, channels, and academic profile protected.
-        </Text>
+        <View style={styles.helperStack}>
+          <Text style={[authTypography.helperText, { color: colors.muted }]}>
+            Strong passwords and email verification help keep your notices, channels, and academic profile protected.
+          </Text>
+          {referralCode ? (
+            <View style={[styles.referralNotice, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="gift-outline" size={16} color={colors.active} />
+              <Text style={[styles.referralNoticeText, { color: colors.textPrimary }]}>
+                {referrerName
+                  ? `Signing up with ${referrerName}'s invite: ${formatReferralCode(referralCode)}`
+                  : `Referral ready: ${formatReferralCode(referralCode)}`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       )}
       footer={(
         <View style={styles.footerRow}>
@@ -118,6 +171,23 @@ export default function RegisterScreen() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          editable={!loading}
+        />
+      </View>
+
+      <View style={[styles.inputGroup, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+        <Ionicons name="gift-outline" size={18} color={colors.muted} />
+        <TextInput
+          style={[styles.input, { color: colors.textPrimary }]}
+          placeholder="Referral code (optional)"
+          placeholderTextColor={colors.muted}
+          value={formatReferralCode(referralCode)}
+          onChangeText={(value) => {
+            const nextCode = normalizeReferralCode(value);
+            setReferralCode(nextCode);
+            void storePendingReferralCode(nextCode);
+          }}
+          autoCapitalize="characters"
           editable={!loading}
         />
       </View>
@@ -179,6 +249,24 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
+  helperStack: {
+    gap: 12,
+  },
+  referralNotice: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  referralNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
   inputGroup: {
     minHeight: 58,
     borderRadius: 16,

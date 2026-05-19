@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import * as Calendar from 'expo-calendar';
 import * as ExpoLinking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { eventsAPI, type EventRecord } from '../../services/eventsApi';
 import { useAuth } from '../../context/AuthContext';
 import { canVerifyEventTickets } from '../../utils/permissions';
@@ -68,6 +69,7 @@ export default function EventDetailScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
 
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -274,6 +276,9 @@ export default function EventDetailScreen() {
   if (!event) {
     return (
       <LinearGradient colors={isDark ? ['#06131F', '#0C2035'] : ['#F4FAFF', '#E4F1FF']} style={styles.centered}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, styles.centerBackButton, { backgroundColor: palette.card, borderColor: palette.border }]}>
+          <Ionicons name="arrow-back" size={18} color={palette.accent} />
+        </TouchableOpacity>
         <Text style={[styles.notFoundTitle, { color: palette.text }]}>Event not found</Text>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backToListButton, { backgroundColor: palette.accent }]}>
           <Text style={styles.backToListText}>Go back</Text>
@@ -302,7 +307,7 @@ export default function EventDetailScreen() {
 
   return (
     <LinearGradient colors={isDark ? ['#06131F', '#0B2034', '#102A44'] : ['#F4FAFF', '#E5F2FF', '#D7EBFF']} style={styles.flex}>
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.flex} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top + 12, 34) }]}>
         <Animated.View entering={FadeInUp.duration(420)} style={styles.topRow}>
           <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: palette.card, borderColor: palette.border }]}>
             <Ionicons name="arrow-back" size={18} color={palette.accent} />
@@ -536,6 +541,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 10,
   },
+  centerBackButton: {
+    marginBottom: 6,
+  },
   loadingText: {
     fontSize: 15,
     fontWeight: '600',
@@ -555,7 +563,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 30,
     paddingBottom: 120,
     gap: 14,
   },

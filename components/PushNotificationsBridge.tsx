@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationsContext';
 import {
   buildAppNotificationFromPushData,
   ensurePushNotificationChannelAsync,
+  getExpoNotificationsModule,
   getActionPathFromPushData,
   getNotificationIdFromPushData,
   registerCurrentDeviceForPushAsync,
@@ -89,52 +89,65 @@ export default function PushNotificationsBridge() {
   }, [isAuthenticated, refreshNotifications, user?.email]);
 
   useEffect(() => {
-    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      const appNotification = buildAppNotificationFromPushData(notification.request.content.data);
+    let cancelled = false;
+    let receivedSubscription: { remove: () => void } | null = null;
+    let responseSubscription: { remove: () => void } | null = null;
 
-      if (appNotification) {
-        const presentation = getNotificationPresentation(appNotification, theme);
-        showToast.notification({
-          title: appNotification.title,
-          message: appNotification.message,
-          label: presentation.label,
-          accent: presentation.accent,
-          background: presentation.soft,
-          text: theme.text,
-          subtext: theme.textMuted,
-          icon: presentation.icon,
-        });
+    const attachListeners = async () => {
+      const Notifications = getExpoNotificationsModule();
+      if (!Notifications || cancelled) {
+        return;
       }
 
-      void refreshNotifications();
-    });
+      receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+        const appNotification = buildAppNotificationFromPushData(notification.request.content.data);
 
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      void openNotificationFromData(
-        response.notification.request.content.data,
-        response.notification.request.identifier
-      );
-    });
-
-    void Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        if (!response) {
-          return;
+        if (appNotification) {
+          const presentation = getNotificationPresentation(appNotification, theme);
+          showToast.notification({
+            title: appNotification.title,
+            message: appNotification.message,
+            label: presentation.label,
+            accent: presentation.accent,
+            background: presentation.soft,
+            text: theme.text,
+            subtext: theme.textMuted,
+            icon: presentation.icon,
+          });
         }
 
+        void refreshNotifications();
+      });
+
+      responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
         void openNotificationFromData(
           response.notification.request.content.data,
           response.notification.request.identifier
         );
-        void Notifications.clearLastNotificationResponseAsync();
-      })
-      .catch((error) => {
-        console.warn('Failed to inspect the last push notification response', error);
       });
 
+      try {
+        const response = await Notifications.getLastNotificationResponseAsync();
+        if (!response || cancelled) {
+          return;
+        }
+
+        await openNotificationFromData(
+          response.notification.request.content.data,
+          response.notification.request.identifier
+        );
+        await Notifications.clearLastNotificationResponseAsync();
+      } catch (error) {
+        console.warn('Failed to inspect the last push notification response', error);
+      }
+    };
+
+    void attachListeners();
+
     return () => {
-      receivedSubscription.remove();
-      responseSubscription.remove();
+      cancelled = true;
+      receivedSubscription?.remove();
+      responseSubscription?.remove();
     };
   }, [openNotificationFromData, refreshNotifications, theme]);
 

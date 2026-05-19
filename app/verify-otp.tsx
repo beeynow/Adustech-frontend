@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +20,8 @@ const formatTime = (seconds: number) => {
 
 export default function VerifyOTPScreen() {
   const params = useLocalSearchParams<{ email?: string; debugOtp?: string; mailPreviewUrl?: string }>();
-  const email = normalizeEmail(params.email || '');
+  const [resolvedEmail, setResolvedEmail] = useState(normalizeEmail(params.email || ''));
+  const email = resolvedEmail;
   const router = useRouter();
   const { verifyOTP, resendOTP } = useAuth();
   const isDark = useColorScheme() === 'dark';
@@ -34,6 +36,32 @@ export default function VerifyOTPScreen() {
   const [timeLeft, setTimeLeft] = useState(OTP_EXPIRY_TIME);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [attempts, setAttempts] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const hydratePendingEmail = async () => {
+      const paramEmail = normalizeEmail(params.email || '');
+      if (paramEmail) {
+        if (mounted) {
+          setResolvedEmail(paramEmail);
+        }
+        await AsyncStorage.setItem('pendingEmail', paramEmail);
+        return;
+      }
+
+      const storedEmail = normalizeEmail((await AsyncStorage.getItem('pendingEmail')) || '');
+      if (mounted) {
+        setResolvedEmail(storedEmail);
+      }
+    };
+
+    void hydratePendingEmail();
+
+    return () => {
+      mounted = false;
+    };
+  }, [params.email]);
 
   useEffect(() => {
     if (!email) {
@@ -109,7 +137,11 @@ export default function VerifyOTPScreen() {
         return;
       }
 
-      showToast.success('Email verified successfully. You can now sign in.');
+      showToast.success(
+        result.referral?.applied
+          ? `${result.message || 'Email verified successfully.'} ${result.referral.referrerName} earned ${result.referral.pointsAwarded} referral points.`
+          : result.message || 'Email verified successfully. You can now sign in.'
+      );
       router.replace('/login');
     } finally {
       setLoading(false);
@@ -135,6 +167,7 @@ export default function VerifyOTPScreen() {
       setAttempts(0);
       setTimeLeft(OTP_EXPIRY_TIME);
       setResendCooldown(RESEND_COOLDOWN);
+      await AsyncStorage.setItem('pendingEmail', email);
       showToast.success(
         result.mailPreviewUrl
           ? 'A fresh verification code is waiting in Mailpit.'

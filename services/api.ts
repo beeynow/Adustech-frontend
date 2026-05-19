@@ -1,13 +1,57 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { getRuntimeConfig } from './config';
 
 type ApiLogLevel = 'debug' | 'warn' | 'error';
+type RecoverableAuthData = {
+  message?: string;
+  debug?: {
+    otp?: string;
+    resetToken?: string;
+    expiresInMinutes?: number;
+  };
+  delivery?: {
+    previewUrl?: string;
+    mode?: string;
+    message?: string;
+  };
+};
+type ApiResponseSuccess<T> = {
+  success: true;
+  data: T;
+};
+type ApiResponseFailure = {
+  success: false;
+  message: string;
+  status?: number;
+  code?: string;
+  details?: unknown;
+  requiresVerification?: boolean;
+  pendingEmail?: string;
+};
 
 const runtimeConfig = getRuntimeConfig();
 const isProduction = runtimeConfig.environment === 'production';
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  __apiFallbackIndex?: number;
+};
 
 const log = (level: ApiLogLevel, message: string, payload?: unknown) => {
   if (isProduction && level === 'debug') {
+    return;
+  }
+
+  if (payload === undefined) {
+    if (level === 'error') {
+      console.error(message);
+      return;
+    }
+
+    if (level === 'warn') {
+      console.warn(message);
+      return;
+    }
+
+    console.log(message);
     return;
   }
 
@@ -23,6 +67,15 @@ const log = (level: ApiLogLevel, message: string, payload?: unknown) => {
 
   console.log(message, payload);
 };
+
+if (!isProduction) {
+  log('debug', 'API backends configured', {
+    executionEnvironment: runtimeConfig.executionEnvironment,
+    resolutionMode: runtimeConfig.apiResolutionMode,
+    apiUrls: runtimeConfig.apiUrls,
+    localDevApiBaseUrl: runtimeConfig.localDevApiBaseUrl,
+  });
+}
 
 export class ApiError extends Error {
   status?: number;
@@ -61,6 +114,69 @@ export const getErrorMessage = (error: unknown, fallbackMessage: string): string
   return toApiError(error, fallbackMessage).message;
 };
 
+const toFailureResult = (error: unknown, fallbackMessage: string): ApiResponseFailure => {
+  const apiError = toApiError(error, fallbackMessage);
+  const details = apiError.details && typeof apiError.details === 'object'
+    ? apiError.details as Record<string, unknown>
+    : null;
+
+  return {
+    success: false,
+    message: apiError.message,
+    status: apiError.status,
+    code: apiError.code,
+    details: apiError.details,
+    requiresVerification: details?.requiresVerification === true,
+    pendingEmail: typeof details?.pendingEmail === 'string' ? details.pendingEmail : undefined,
+  };
+};
+
+const toSuccessResult = <T>(data: T): ApiResponseSuccess<T> => ({
+  success: true,
+  data,
+});
+
+const getRecoverableAuthData = (
+  error: unknown,
+  fallbackMessage: string,
+  recoverableMessagePattern: RegExp
+): RecoverableAuthData | null => {
+  const apiError = toApiError(error, fallbackMessage);
+  if (apiError.status !== 503 || !recoverableMessagePattern.test(apiError.message)) {
+    return null;
+  }
+
+  if (apiError.details && typeof apiError.details === 'object') {
+    return apiError.details as RecoverableAuthData;
+  }
+
+  return { message: apiError.message };
+};
+
+const isRetriableApiFailure = (apiError: ApiError): boolean => {
+  if (apiError.code === 'ECONNABORTED') {
+    return true;
+  }
+
+  if (apiError.message.toLowerCase().includes('network')) {
+    return true;
+  }
+
+  return typeof apiError.status === 'number' && apiError.status >= 500;
+};
+
+const getRegistrationFailureHint = (message: string): string => {
+  if (runtimeConfig.environment !== 'development' || runtimeConfig.apiUrls.length < 2) {
+    return message;
+  }
+
+  if (!/error registering user/i.test(message)) {
+    return message;
+  }
+
+  return `${message} Expo Go also checked your fallback backend. If you want live signup during local testing, make sure the backend is running on your machine and reachable on port 5000.`;
+};
+
 const api: AxiosInstance = axios.create({
   baseURL: runtimeConfig.apiUrl,
   headers: {
@@ -73,7 +189,14 @@ const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    log('debug', `API -> ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    const retriableConfig = config as RetriableRequestConfig;
+    const fallbackIndex = typeof retriableConfig.__apiFallbackIndex === 'number'
+      ? retriableConfig.__apiFallbackIndex
+      : 0;
+
+    retriableConfig.baseURL = runtimeConfig.apiUrls[fallbackIndex] || runtimeConfig.apiUrl;
+
+    log('debug', `API -> ${retriableConfig.method?.toUpperCase()} ${retriableConfig.baseURL}${retriableConfig.url}`);
     return config;
   },
   (error) => {
@@ -88,8 +211,34 @@ api.interceptors.response.use(
     log('debug', `API <- ${response.status} ${response.config.url}`);
     return response;
   },
-  (error) => {
+  async (error) => {
     const apiError = toApiError(error, 'Request failed. Please try again.');
+    const originalConfig = error.config as RetriableRequestConfig | undefined;
+    const currentFallbackIndex = typeof originalConfig?.__apiFallbackIndex === 'number'
+      ? originalConfig.__apiFallbackIndex
+      : 0;
+    const nextFallbackIndex = currentFallbackIndex + 1;
+
+    if (
+      originalConfig
+      && nextFallbackIndex < runtimeConfig.apiUrls.length
+      && isRetriableApiFailure(apiError)
+    ) {
+      const fromBaseUrl = runtimeConfig.apiUrls[currentFallbackIndex] || runtimeConfig.apiUrl;
+      const toBaseUrl = runtimeConfig.apiUrls[nextFallbackIndex];
+
+      originalConfig.__apiFallbackIndex = nextFallbackIndex;
+      log('warn', 'Retrying request with fallback API backend', {
+        method: originalConfig.method,
+        url: originalConfig.url,
+        fromBaseUrl,
+        toBaseUrl,
+        status: apiError.status,
+        code: apiError.code,
+      });
+
+      return api.request(originalConfig);
+    }
 
     if (apiError.code === 'ECONNABORTED') {
       log('warn', 'API timeout error', apiError);
@@ -104,14 +253,25 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  register: async (name: string, email: string, password: string) => {
+  register: async (name: string, email: string, password: string, referralCode?: string) => {
     try {
-      const response = await api.post('/auth/register', { name, email, password });
-      return { success: true, data: response.data };
+      const response = await api.post('/auth/register', { name, email, password, referralCode });
+      return toSuccessResult(response.data);
     } catch (error) {
+      const recoverableData = getRecoverableAuthData(
+        error,
+        'Registration failed. Please try again.',
+        /account was created/i
+      );
+      if (recoverableData) {
+        return toSuccessResult(recoverableData);
+      }
+
       return {
-        success: false,
-        message: getErrorMessage(error, 'Registration failed. Please try again.'),
+        ...toFailureResult(error, 'Registration failed. Please try again.'),
+        message: getRegistrationFailureHint(
+          getErrorMessage(error, 'Registration failed. Please try again.')
+        ),
       };
     }
   },
@@ -119,144 +279,126 @@ export const authAPI = {
   verifyOTP: async (email: string, otp: string) => {
     try {
       const response = await api.post('/auth/verify-otp', { email, otp });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'OTP verification failed.'),
-      };
+      return toFailureResult(error, 'OTP verification failed.');
     }
   },
 
   resendOTP: async (email: string) => {
     try {
       const response = await api.post('/auth/resend-otp', { email });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to resend OTP.'),
-      };
+      const recoverableData = getRecoverableAuthData(
+        error,
+        'Failed to resend OTP.',
+        /new otp was generated/i
+      );
+      if (recoverableData) {
+        return toSuccessResult(recoverableData);
+      }
+
+      return toFailureResult(error, 'Failed to resend OTP.');
     }
   },
 
   login: async (email: string, password: string) => {
     try {
       const response = await api.post('/auth/login', { email, password });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Login failed. Please check your credentials.'),
-      };
+      return toFailureResult(error, 'Login failed. Please check your credentials.');
     }
   },
 
   logout: async () => {
     try {
       const response = await api.post('/auth/logout');
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Logout failed.'),
-      };
+      return toFailureResult(error, 'Logout failed.');
     }
   },
 
   forgotPassword: async (email: string) => {
     try {
       const response = await api.post('/auth/forgot-password', { email });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to initiate password reset.'),
-      };
+      const recoverableData = getRecoverableAuthData(
+        error,
+        'Failed to initiate password reset.',
+        /generated a reset code/i
+      );
+      if (recoverableData) {
+        return toSuccessResult(recoverableData);
+      }
+
+      return toFailureResult(error, 'Failed to initiate password reset.');
     }
   },
 
   resetPassword: async (email: string, token: string, newPassword: string) => {
     try {
       const response = await api.post('/auth/reset-password', { email, token, newPassword });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to reset password.'),
-      };
+      return toFailureResult(error, 'Failed to reset password.');
     }
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
     try {
       const response = await api.post('/auth/change-password', { currentPassword, newPassword });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to change password.'),
-      };
+      return toFailureResult(error, 'Failed to change password.');
     }
   },
 
   createAdmin: async (payload: { email: string }) => {
     try {
       const response = await api.post('/auth/create-admin', payload);
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to create admin.'),
-      };
+      return toFailureResult(error, 'Failed to create admin.');
     }
   },
 
   listAdmins: async () => {
     try {
       const response = await api.get('/auth/admins');
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to list admins.'),
-      };
+      return toFailureResult(error, 'Failed to list admins.');
     }
   },
 
   demoteAdmin: async (email: string) => {
     try {
       const response = await api.post('/auth/demote-admin', { email });
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to demote admin.'),
-      };
+      return toFailureResult(error, 'Failed to demote admin.');
     }
   },
 
   me: async () => {
     try {
       const response = await api.get('/auth/me');
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Not authenticated'),
-      };
+      return toFailureResult(error, 'Not authenticated');
     }
   },
 
   getDashboard: async () => {
     try {
       const response = await api.get('/auth/dashboard');
-      return { success: true, data: response.data };
+      return toSuccessResult(response.data);
     } catch (error) {
-      return {
-        success: false,
-        message: getErrorMessage(error, 'Failed to fetch dashboard data.'),
-      };
+      return toFailureResult(error, 'Failed to fetch dashboard data.');
     }
   },
 };

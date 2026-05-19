@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
@@ -10,11 +10,14 @@ import { showToast } from '../utils/toast';
 import { getPasswordValidationErrors, isValidEmail, normalizeEmail } from '../utils/validation';
 
 export default function ResetPasswordScreen() {
+  const params = useLocalSearchParams<{ debugResetToken?: string; mailPreviewUrl?: string }>();
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [debugResetToken, setDebugResetToken] = useState(String(params.debugResetToken || '').trim());
+  const [mailPreviewUrl, setMailPreviewUrl] = useState(String(params.mailPreviewUrl || '').trim());
   const { resetPassword } = useAuth();
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
@@ -30,6 +33,16 @@ export default function ResetPasswordScreen() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (params.debugResetToken) {
+      setDebugResetToken(String(params.debugResetToken).trim());
+    }
+
+    if (params.mailPreviewUrl) {
+      setMailPreviewUrl(String(params.mailPreviewUrl).trim());
+    }
+  }, [params.debugResetToken, params.mailPreviewUrl]);
 
   const handleSubmit = async () => {
     const normalizedEmail = normalizeEmail(email);
@@ -75,9 +88,24 @@ export default function ResetPasswordScreen() {
       title="Set a new password"
       subtitle="Use the reset code from your email and choose a stronger password."
       helper={(
-        <Text style={[authTypography.helperText, { color: colors.muted }]}>
-          Passwords must include uppercase, lowercase, a number, and a special character.
-        </Text>
+        <View style={styles.helperStack}>
+          <Text style={[authTypography.helperText, { color: colors.muted }]}>
+            Passwords must include uppercase, lowercase, a number, and a special character.
+          </Text>
+          {mailPreviewUrl || debugResetToken ? (
+            <View style={[styles.devHintCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={[styles.devHintTitle, { color: colors.textPrimary }]}>Development delivery</Text>
+              {mailPreviewUrl ? (
+                <Text style={[styles.devHintText, { color: colors.muted }]}>
+                  Reset emails are landing in Mailpit: {mailPreviewUrl}
+                </Text>
+              ) : null}
+              {debugResetToken ? (
+                <Text style={[styles.devHintCode, { color: colors.active }]}>Current reset code: {debugResetToken}</Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
       )}
       footer={(
         <Pressable onPress={() => router.replace('/login')} disabled={loading}>
@@ -171,6 +199,28 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 12,
     fontWeight: '700',
+  },
+  helperStack: {
+    gap: 12,
+  },
+  devHintCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  devHintTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  devHintText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  devHintCode: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   primaryButton: {
     minHeight: 58,

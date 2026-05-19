@@ -21,6 +21,7 @@
       "bundleIdentifier": "com.adustech.app",
       "buildNumber": "1.0.0",
       "associatedDomains": [
+        "applinks:adustech.app",
         "applinks:www.beeynow.online",
         "applinks:beeynow.online"
       ],
@@ -72,6 +73,11 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
+            {
+              "scheme": "https",
+              "host": "adustech.app",
+              "pathPrefix": "/"
+            },
             {
               "scheme": "https",
               "host": "www.beeynow.online",
@@ -142,7 +148,10 @@
     },
     "extra": {
       "apiBaseUrl": "https://adustech-backend.vercel.app",
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "48038cb9-2140-4833-9c45-5d6082f9e82b"
+      }
     },
     "runtimeVersion": "1.0.0"
   }
