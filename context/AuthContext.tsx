@@ -1,6 +1,6 @@
 import React, { createContext, startTransition, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI } from '../services/api';
+import { authAPI, clearApiAuthToken, setApiAuthToken } from '../services/api';
 import { unregisterCurrentDeviceForPushAsync } from '../services/pushNotifications';
 import type { UserRole } from '../utils/permissions';
 import { normalizeEmail } from '../utils/validation';
@@ -31,6 +31,7 @@ type LoginResult = {
 type VerifyOtpResult = {
   success: boolean;
   message?: string;
+  autoLoggedIn?: boolean;
   referral?: {
     applied: boolean;
     pointsAwarded: number;
@@ -55,6 +56,7 @@ interface AuthContextType {
 
 const STORAGE_KEYS = {
   user: 'user',
+  authToken: 'authToken',
   pendingEmail: 'pendingEmail',
   resetEmail: 'resetEmail',
 } as const;
@@ -91,9 +93,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const persistAuthToken = async (token?: string | null) => {
+    const normalizedToken = typeof token === 'string' ? token.trim() : '';
+
+    if (normalizedToken) {
+      setApiAuthToken(normalizedToken);
+      await AsyncStorage.setItem(STORAGE_KEYS.authToken, normalizedToken);
+      return normalizedToken;
+    }
+
+    clearApiAuthToken();
+    await AsyncStorage.removeItem(STORAGE_KEYS.authToken);
+    return null;
+  };
+
   const clearAuthStorage = async () => {
+    clearApiAuthToken();
     await AsyncStorage.multiRemove([
       STORAGE_KEYS.user,
+      STORAGE_KEYS.authToken,
       STORAGE_KEYS.pendingEmail,
       STORAGE_KEYS.resetEmail,
     ]);
@@ -119,6 +137,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
 
+    if (typeof me.data?.authToken === 'string' && me.data.authToken.trim().length > 0) {
+      await persistAuthToken(me.data.authToken);
+    }
+
     startTransition(() => setUser(hydratedUser));
     await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(hydratedUser));
     return true;
@@ -126,9 +148,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkAuthStatus = async () => {
     try {
+      const rawAuthToken = await AsyncStorage.getItem(STORAGE_KEYS.authToken);
+      const normalizedStoredToken = typeof rawAuthToken === 'string' ? rawAuthToken.trim() : '';
+
+      if (normalizedStoredToken) {
+        setApiAuthToken(normalizedStoredToken);
+      } else {
+        clearApiAuthToken();
+      }
+
       const rawUser = await AsyncStorage.getItem(STORAGE_KEYS.user);
       if (!rawUser) {
         startTransition(() => setUser(null));
+        if (normalizedStoredToken) {
+          await refreshSession();
+        }
         return;
       }
 
@@ -136,6 +170,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!parsedLocalUser) {
         await AsyncStorage.removeItem(STORAGE_KEYS.user);
         startTransition(() => setUser(null));
+        if (normalizedStoredToken) {
+          await refreshSession();
+        }
         return;
       }
 
@@ -176,10 +213,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const normalizedEmail = normalizeEmail(email);
     const result = await authAPI.verifyOTP(normalizedEmail, otp.trim());
     if (result.success) {
+      const mappedUser = sanitizeUser(result.data?.user, normalizedEmail);
+      if (typeof result.data?.authToken === 'string' && result.data.authToken.trim().length > 0) {
+        await persistAuthToken(result.data.authToken);
+      }
+      if (mappedUser) {
+        startTransition(() => setUser(mappedUser));
+        await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
+      }
       await AsyncStorage.removeItem(STORAGE_KEYS.pendingEmail);
       return {
         success: true,
         message: result.data.message,
+        autoLoggedIn: Boolean(mappedUser),
         referral: result.data.referral || null,
       };
     }
@@ -207,6 +253,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const mappedUser = sanitizeUser(result.data?.user, normalizedEmail);
       if (!mappedUser) {
         return { success: false, message: 'Invalid account data returned by server.' };
+      }
+
+      if (typeof result.data?.authToken === 'string' && result.data.authToken.trim().length > 0) {
+        await persistAuthToken(result.data.authToken);
       }
 
       startTransition(() => setUser(mappedUser));

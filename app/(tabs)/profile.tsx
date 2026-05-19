@@ -164,6 +164,49 @@ export default function ProfileScreen() {
         return;
       }
 
+      if (user?.email) {
+        const fallbackProfile: UserProfile = {
+          id: 'session-fallback',
+          name: user.name || '',
+          email: user.email,
+          role: user.role,
+          bio: '',
+          profileImage: '',
+          level: '',
+          department: '',
+          faculty: '',
+          phone: '',
+          gender: '',
+          dateOfBirth: null,
+          address: '',
+          country: '',
+          facultyId: null,
+          departmentId: null,
+          levelId: null,
+        };
+
+        setProfile(fallbackProfile);
+        setName(fallbackProfile.name);
+        setBio('');
+        setLevel('');
+        setDepartment('');
+        setFaculty('');
+        setPhone('');
+        setGender('');
+        setDateOfBirth('');
+        setAddress('');
+        setCountry('');
+        setProfileImage('');
+        setSelectedFacultyId('');
+        setSelectedDepartmentId('');
+        setSelectedLevelId('');
+        setDepartments([]);
+        setLevelOptions([]);
+        setEditing(true);
+        showToast.warning(result.message || 'We could not sync your full profile yet. You can still complete it now.');
+        return;
+      }
+
       showToast.error(result.message || 'Failed to load your profile.');
     } finally {
       setAcademicsLoading(false);

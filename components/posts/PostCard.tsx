@@ -28,6 +28,7 @@ type PostCardProps = {
   onPressLike?: () => void;
   onPressShare?: () => void;
   variant?: 'feed' | 'detail';
+  showImage?: boolean;
 };
 
 type ActionProps = {
@@ -80,6 +81,7 @@ export function PostCard({
   onPressLike,
   onPressShare,
   variant = 'feed',
+  showImage = true,
 }: PostCardProps) {
   const theme = useAppTheme();
   const isDetail = variant === 'detail';
@@ -151,7 +153,7 @@ export function PostCard({
               <Text style={[styles.body, { color: theme.text }]}>{visibleBodyText}</Text>
             ) : null}
 
-            {post.imageUrl ? (
+            {post.imageUrl && showImage ? (
               <View
                 style={[
                   styles.imageWrap,

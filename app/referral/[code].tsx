@@ -90,7 +90,16 @@ export default function ReferralLinkScreen() {
             <Text style={[styles.previewLabel, { color: colors.muted }]}>Referral code</Text>
             <Text style={[styles.previewCode, { color: colors.textPrimary }]}>{formatReferralCode(preview.code)}</Text>
             <Text style={[styles.previewCopy, { color: colors.muted }]}>
-              {preview.referrer.department || 'ADUSTECH community'} • {preview.program.pointsPerSuccessfulReferral} points per verified signup
+              {preview.referrer.department || 'ADUSTECH community'} • {preview.program.rewardLabel}
+            </Text>
+          </View>
+          <View style={[styles.programCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.programTitle, { color: colors.textPrimary }]}>How this invite works</Text>
+            <Text style={[styles.programText, { color: colors.muted }]}>
+              {preview.program.qualificationRule}
+            </Text>
+            <Text style={[styles.programText, { color: colors.muted }]}>
+              {preview.program.eligibilityRule}
             </Text>
           </View>
         </View>
@@ -121,23 +130,27 @@ export default function ReferralLinkScreen() {
             style={styles.primaryWrap}
           >
             <LinearGradient colors={['#1976D2', '#42A5F5']} style={styles.primaryButton}>
-              <Text style={styles.primaryText}>Create account with invite</Text>
+              <Text style={styles.primaryText}>Continue to sign up</Text>
               <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
             </LinearGradient>
           </Pressable>
 
           <Pressable
-            onPress={() => router.replace({
-              pathname: '/register' as any,
-              params: {
-                referralCode: preview.code,
-                referrerName: preview.referrer.name,
-              },
-            })}
+            onPress={() => router.replace('/login')}
             style={[styles.secondaryButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
           >
-            <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>Use code {formatReferralCode(preview.code)}</Text>
+            <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>I already have an account</Text>
           </Pressable>
+
+          <View style={[styles.codeOnlyCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.previewLabel, { color: colors.muted }]}>Code only</Text>
+            <Text selectable style={[styles.codeOnlyText, { color: colors.textPrimary }]}>
+              {formatReferralCode(preview.code)}
+            </Text>
+            <Text style={[styles.codeOnlyHint, { color: colors.muted }]}>
+              Use this during registration if you leave the invite link and return later.
+            </Text>
+          </View>
         </View>
       ) : (
         <View style={styles.actionStack}>
@@ -145,6 +158,12 @@ export default function ReferralLinkScreen() {
             <LinearGradient colors={['#1976D2', '#42A5F5']} style={styles.primaryButton}>
               <Text style={styles.primaryText}>Create account</Text>
             </LinearGradient>
+          </Pressable>
+          <Pressable
+            onPress={() => router.replace('/login')}
+            style={[styles.secondaryButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+          >
+            <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>Go to sign in</Text>
           </Pressable>
         </View>
       )}
@@ -175,6 +194,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   previewCopy: {
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  programCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  programTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  programText: {
     fontSize: 13,
     lineHeight: 20,
     fontWeight: '600',
@@ -218,6 +253,23 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontSize: 14,
     fontWeight: '800',
+  },
+  codeOnlyCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  codeOnlyText: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  codeOnlyHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
   },
   footerStack: {
     gap: 12,

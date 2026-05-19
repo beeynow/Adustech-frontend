@@ -90,6 +90,27 @@ export default function EventsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadEvents(true); }} tintColor={palette.accent} />
         }
       >
+        <View style={styles.pageHeader}>
+          <TouchableOpacity
+            style={[
+              styles.pageBackButton,
+              {
+                backgroundColor: palette.card,
+                borderColor: palette.border,
+                shadowColor: isDark ? '#020B14' : '#9BB8D8',
+              },
+            ]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={18} color={palette.text} />
+          </TouchableOpacity>
+
+          <View style={styles.pageHeaderCopy}>
+            <Text style={[styles.pageHeaderEyebrow, { color: palette.subtext }]}>Back to channels</Text>
+            <Text style={[styles.pageHeaderTitle, { color: palette.text }]}>Event channel</Text>
+          </View>
+        </View>
+
         <Animated.View entering={FadeInUp.duration(420)} style={[styles.heroShell, { borderColor: palette.border }]}>
           <LinearGradient colors={isDark ? ['rgba(12,37,58,0.98)', 'rgba(16,60,108,0.98)'] : ['#FFFFFF', '#E9F4FF']} style={styles.heroCard}>
             <View style={styles.heroTopRow}>
@@ -343,8 +364,40 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 18,
+    paddingTop: 22,
     paddingBottom: 120,
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  pageBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  pageHeaderCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  pageHeaderEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  pageHeaderTitle: {
+    fontSize: 21,
+    fontWeight: '900',
   },
   heroShell: {
     borderWidth: 1,

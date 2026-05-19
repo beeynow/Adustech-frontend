@@ -114,13 +114,13 @@ export default function LeadersboardScreen() {
       <HeroCard
         eyebrow="Leaderboard"
         title="Referral Ranking"
-        subtitle="Every successful verified referral awards 10 points, and those points drive the live leaderboard across the app."
+        subtitle={response?.program.qualificationRule || 'Every successful verified referral awards points, and those points drive the live leaderboard across the app.'}
         icon="trophy-outline"
       >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 }}>
           <Chip label={`${leaders.length} ranked`} icon="people-outline" tone="accent" />
           <Chip label={boardLabel} icon="stats-chart-outline" tone="success" />
-          <Chip label="10 points per referral" icon="star-outline" tone="warning" />
+          <Chip label={response?.program.rewardLabel || '10 points per referral'} icon="star-outline" tone="warning" />
           {response?.currentUserRank ? (
             <Chip label={`You are #${response.currentUserRank}`} icon="person-outline" tone="danger" />
           ) : null}

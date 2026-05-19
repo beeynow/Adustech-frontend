@@ -140,9 +140,9 @@ export default function VerifyOTPScreen() {
       showToast.success(
         result.referral?.applied
           ? `${result.message || 'Email verified successfully.'} ${result.referral.referrerName} earned ${result.referral.pointsAwarded} referral points.`
-          : result.message || 'Email verified successfully. You can now sign in.'
+          : result.message || 'Email verified successfully. Your account is ready.'
       );
-      router.replace('/login');
+      router.replace(result.autoLoggedIn ? '/(tabs)/profile' : '/login');
     } finally {
       setLoading(false);
     }

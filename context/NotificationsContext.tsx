@@ -75,6 +75,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
       applyNotificationSnapshot(response);
     } catch (error) {
+      if (error instanceof Error && /(unauthorized|authentication required|please log in)/i.test(error.message)) {
+        resetNotifications();
+        return;
+      }
+
       if (mountedRef.current) {
         console.warn('Failed to refresh notifications', error);
       }

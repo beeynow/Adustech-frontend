@@ -4,6 +4,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  role?: string;
   bio?: string;
   profileImage?: string;
   level?: string;

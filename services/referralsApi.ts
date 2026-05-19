@@ -1,5 +1,12 @@
 import api, { getErrorMessage } from './api';
 
+export interface ReferralProgram {
+  pointsPerSuccessfulReferral: number;
+  rewardLabel: string;
+  qualificationRule: string;
+  eligibilityRule: string;
+}
+
 export interface ReferralPreview {
   code: string;
   referralLink: string;
@@ -9,9 +16,7 @@ export interface ReferralPreview {
     department: string;
     profileImage: string;
   };
-  program: {
-    pointsPerSuccessfulReferral: number;
-  };
+  program: ReferralProgram;
 }
 
 export interface ReferralHistoryItem {
@@ -36,13 +41,16 @@ export interface ReferralOverview {
   summary: {
     points: number;
     completedReferrals: number;
+    totalReferrals: number;
+    pendingReferrals: number;
+    conversionRate: number;
     rank: number;
     weeklyPoints: number;
   };
   share: {
     referralCode: string;
     referralLink: string;
-    pointsPerSuccessfulReferral: number;
+    message: string;
   };
   invitedBy: {
     id: string;
@@ -50,6 +58,7 @@ export interface ReferralOverview {
     department: string;
     referralCode: string;
   } | null;
+  program: ReferralProgram;
   history: ReferralHistoryItem[];
 }
 
@@ -70,9 +79,7 @@ export interface ReferralLeaderboardResponse {
   leaders: ReferralLeaderboardEntry[];
   currentUserRank: number | null;
   scopeMessage: string;
-  program: {
-    pointsPerSuccessfulReferral: number;
-  };
+  program: ReferralProgram;
 }
 
 export const referralsAPI = {

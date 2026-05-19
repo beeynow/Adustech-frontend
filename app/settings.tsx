@@ -47,6 +47,15 @@ export default function SettingsScreen() {
             {runtime.localDevApiBaseUrl ? (
               <Text style={styles.infoText}>Local fallback: {runtime.localDevApiBaseUrl}</Text>
             ) : null}
+            {runtime.manualLocalApiBaseUrl ? (
+              <Text style={styles.infoText}>Manual local override: {runtime.manualLocalApiBaseUrl}</Text>
+            ) : null}
+            {runtime.environment === 'development' && runtime.apiResolutionMode === 'remote-only' ? (
+              <Text style={styles.infoHint}>
+                Expo Go did not detect a LAN backend automatically. Add `EXPO_PUBLIC_LOCAL_API_BASE_URL=http://YOUR_LAN_IP:5000`
+                to the frontend `.env`, then restart Expo with a clean cache.
+              </Text>
+            ) : null}
             <Text style={styles.infoHint}>
               This helps confirm which backend the app is currently targeting while you test.
             </Text>

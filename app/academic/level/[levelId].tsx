@@ -21,6 +21,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { academicApi, AcademicPostRecord, LevelRecord } from '@/services/academicApi';
+import { formatPostCount } from '@/components/posts/postUi';
 import { showToast } from '@/utils/toast';
 
 const normalizeRole = (role?: string) => role?.trim().toLowerCase().replace(/_/g, '-') || '';
@@ -193,17 +194,17 @@ export default function LevelPostsPage() {
             size={20}
             color={item.isLiked ? '#e91e63' : '#666'}
           />
-          <Text style={styles.engagementText}>{item.likesCount || 0}</Text>
+          <Text style={styles.engagementText}>{formatPostCount(item.likesCount || 0)}</Text>
         </TouchableOpacity>
 
         <View style={styles.engagementButton}>
           <Ionicons name="chatbubble-outline" size={20} color="#666" />
-          <Text style={styles.engagementText}>{item.commentsCount || 0}</Text>
+          <Text style={styles.engagementText}>{formatPostCount(item.commentsCount || 0)}</Text>
         </View>
 
         <View style={styles.engagementButton}>
           <Ionicons name="eye-outline" size={20} color="#666" />
-          <Text style={styles.engagementText}>{item.viewsCount || 0}</Text>
+          <Text style={styles.engagementText}>{formatPostCount(item.viewsCount || 0)}</Text>
         </View>
       </View>
     </TouchableOpacity>

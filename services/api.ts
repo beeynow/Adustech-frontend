@@ -34,6 +34,36 @@ const isProduction = runtimeConfig.environment === 'production';
 type RetriableRequestConfig = InternalAxiosRequestConfig & {
   __apiFallbackIndex?: number;
 };
+let activeBackendIndex = 0;
+let activeAuthToken = '';
+
+export const setApiAuthToken = (token?: string | null) => {
+  activeAuthToken = typeof token === 'string' ? token.trim() : '';
+};
+
+export const clearApiAuthToken = () => {
+  activeAuthToken = '';
+};
+
+const getBackendUrlByIndex = (index: number): string => (
+  runtimeConfig.apiUrls[index] || runtimeConfig.apiUrl
+);
+
+const setActiveBackendIndex = (nextIndex: number, reason: string, context?: Record<string, unknown>) => {
+  if (nextIndex === activeBackendIndex || nextIndex < 0 || nextIndex >= runtimeConfig.apiUrls.length) {
+    return;
+  }
+
+  const previousBackendUrl = getBackendUrlByIndex(activeBackendIndex);
+  activeBackendIndex = nextIndex;
+
+  log('warn', 'Promoting API backend for the current app session', {
+    reason,
+    previousBackendUrl,
+    activeBackendUrl: getBackendUrlByIndex(activeBackendIndex),
+    ...context,
+  });
+};
 
 const log = (level: ApiLogLevel, message: string, payload?: unknown) => {
   if (isProduction && level === 'debug') {
@@ -72,8 +102,11 @@ if (!isProduction) {
   log('debug', 'API backends configured', {
     executionEnvironment: runtimeConfig.executionEnvironment,
     resolutionMode: runtimeConfig.apiResolutionMode,
+    resolutionModeOverride: runtimeConfig.apiResolutionModeOverride,
     apiUrls: runtimeConfig.apiUrls,
     localDevApiBaseUrl: runtimeConfig.localDevApiBaseUrl,
+    manualLocalApiBaseUrl: runtimeConfig.manualLocalApiBaseUrl,
+    hostUriCandidates: runtimeConfig.hostUriCandidates,
   });
 }
 
@@ -166,7 +199,7 @@ const isRetriableApiFailure = (apiError: ApiError): boolean => {
 };
 
 const getRegistrationFailureHint = (message: string): string => {
-  if (runtimeConfig.environment !== 'development' || runtimeConfig.apiUrls.length < 2) {
+  if (runtimeConfig.environment !== 'development') {
     return message;
   }
 
@@ -174,7 +207,15 @@ const getRegistrationFailureHint = (message: string): string => {
     return message;
   }
 
-  return `${message} Expo Go also checked your fallback backend. If you want live signup during local testing, make sure the backend is running on your machine and reachable on port 5000.`;
+  if (runtimeConfig.apiUrls.length >= 2) {
+    return `${message} Expo Go also checked your fallback backend. If you want live signup during local testing, make sure the backend is running on your machine and reachable on port 5000.`;
+  }
+
+  if (runtimeConfig.executionEnvironment === 'storeClient') {
+    return `${message} Expo Go is still using only the hosted backend. Set EXPO_PUBLIC_LOCAL_API_BASE_URL=http://<your-lan-ip>:5000 in Adustech-frontend/.env and restart Expo with npx expo start -c to force local auth testing.`;
+  }
+
+  return `${message} If this is a local auth test, make sure the backend is running and reachable on port 5000.`;
 };
 
 const api: AxiosInstance = axios.create({
@@ -192,9 +233,20 @@ api.interceptors.request.use(
     const retriableConfig = config as RetriableRequestConfig;
     const fallbackIndex = typeof retriableConfig.__apiFallbackIndex === 'number'
       ? retriableConfig.__apiFallbackIndex
-      : 0;
+      : activeBackendIndex;
 
     retriableConfig.baseURL = runtimeConfig.apiUrls[fallbackIndex] || runtimeConfig.apiUrl;
+    const requestHeaders = retriableConfig.headers as Record<string, string | undefined> | undefined;
+
+    if (activeAuthToken) {
+      if (requestHeaders) {
+        requestHeaders.Authorization = `Bearer ${activeAuthToken}`;
+      } else {
+        retriableConfig.headers = { Authorization: `Bearer ${activeAuthToken}` } as InternalAxiosRequestConfig['headers'];
+      }
+    } else if (requestHeaders?.Authorization) {
+      delete requestHeaders.Authorization;
+    }
 
     log('debug', `API -> ${retriableConfig.method?.toUpperCase()} ${retriableConfig.baseURL}${retriableConfig.url}`);
     return config;
@@ -208,6 +260,17 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => {
+    const responseConfig = response.config as RetriableRequestConfig;
+    if (
+      typeof responseConfig.__apiFallbackIndex === 'number'
+      && responseConfig.__apiFallbackIndex !== activeBackendIndex
+    ) {
+      setActiveBackendIndex(responseConfig.__apiFallbackIndex, 'fallback-succeeded', {
+        url: responseConfig.url,
+        method: responseConfig.method,
+      });
+    }
+
     log('debug', `API <- ${response.status} ${response.config.url}`);
     return response;
   },
@@ -227,6 +290,17 @@ api.interceptors.response.use(
       const fromBaseUrl = runtimeConfig.apiUrls[currentFallbackIndex] || runtimeConfig.apiUrl;
       const toBaseUrl = runtimeConfig.apiUrls[nextFallbackIndex];
 
+      if (currentFallbackIndex === activeBackendIndex) {
+        setActiveBackendIndex(nextFallbackIndex, 'network-fallback', {
+          url: originalConfig.url,
+          method: originalConfig.method,
+          fromBaseUrl,
+          toBaseUrl,
+          status: apiError.status,
+          code: apiError.code,
+        });
+      }
+
       originalConfig.__apiFallbackIndex = nextFallbackIndex;
       log('warn', 'Retrying request with fallback API backend', {
         method: originalConfig.method,
@@ -242,6 +316,13 @@ api.interceptors.response.use(
 
     if (apiError.code === 'ECONNABORTED') {
       log('warn', 'API timeout error', apiError);
+    } else if (apiError.status === 401 || apiError.status === 403) {
+      log('warn', 'API authentication response', {
+        message: apiError.message,
+        status: apiError.status,
+        method: originalConfig?.method,
+        url: originalConfig?.url,
+      });
     } else if (apiError.message.toLowerCase().includes('network')) {
       log('warn', 'API network error', apiError);
     } else {

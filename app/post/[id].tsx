@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Share,
@@ -11,6 +12,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -30,6 +32,7 @@ import { useAuth } from '@/context/AuthContext';
 export default function PostDetail() {
   const theme = useAppTheme();
   const { user } = useAuth();
+  const { width: screenWidth } = useWindowDimensions();
   const inputRef = useRef<TextInput | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -40,6 +43,7 @@ export default function PostDetail() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [text, setText] = useState('');
+  const [detailImageAspectRatio, setDetailImageAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -76,6 +80,10 @@ export default function PostDetail() {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    setDetailImageAspectRatio(null);
+  }, [post?.imageUrl]);
 
   const handleShare = async () => {
     try {
@@ -197,9 +205,15 @@ export default function PostDetail() {
     }
   };
 
+  const detailImageWidth = Math.max(240, screenWidth - 56);
+  const detailImageHeight = detailImageAspectRatio
+    ? Math.max(220, Math.min(detailImageWidth / detailImageAspectRatio, 560))
+    : 320;
+
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
       style={[styles.container, { backgroundColor: theme.background }]}
     >
       <LinearGradient colors={theme.backdropGradient} style={StyleSheet.absoluteFillObject} />
@@ -259,10 +273,55 @@ export default function PostDetail() {
                 <PostCard
                   post={post}
                   variant="detail"
+                  showImage={false}
                   onPressComments={() => inputRef.current?.focus()}
                   onPressLike={toggleLike}
                   onPressShare={handleShare}
                 />
+              ) : null}
+
+              {post?.imageUrl ? (
+                <View
+                  style={[
+                    styles.fullImageCard,
+                    {
+                      backgroundColor: theme.surface,
+                      borderColor: theme.border,
+                      shadowColor: theme.shadow,
+                    },
+                  ]}
+                >
+                  <View style={styles.fullImageHeader}>
+                    <View style={[styles.fullImageBadge, { backgroundColor: theme.accentSoft }]}>
+                      <Ionicons name="image-outline" size={15} color={theme.accent} />
+                      <Text style={[styles.fullImageBadgeText, { color: theme.accent }]}>Full image</Text>
+                    </View>
+                    <Text style={[styles.fullImageHint, { color: theme.textSoft }]}>
+                      Original framing preserved
+                    </Text>
+                  </View>
+
+                  <View style={[styles.fullImageFrame, { backgroundColor: theme.surfaceMuted, borderColor: theme.border }]}>
+                    <Image
+                      source={{ uri: post.imageUrl }}
+                      style={[
+                        styles.fullImage,
+                        {
+                          height: detailImageHeight,
+                        },
+                      ]}
+                      resizeMode="contain"
+                      onLoad={({ nativeEvent }) => {
+                        const width = nativeEvent.source?.width || 0;
+                        const height = nativeEvent.source?.height || 0;
+
+                        if (width > 0 && height > 0) {
+                          setDetailImageAspectRatio(width / height);
+                        }
+                      }}
+                    />
+                  </View>
+                </View>
               ) : null}
 
               <View
@@ -469,6 +528,50 @@ const styles = StyleSheet.create({
   listHeader: {
     gap: 16,
     marginBottom: 14,
+  },
+  fullImageCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 16,
+    gap: 14,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  fullImageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  fullImageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  fullImageBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  fullImageHint: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fullImageFrame: {
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  fullImage: {
+    width: '100%',
   },
   detailActionsCard: {
     borderRadius: 26,

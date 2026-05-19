@@ -56,6 +56,8 @@ type LevelChoice = {
   label: string;
 };
 
+type ImageAttachmentMode = 'full' | 'crop';
+
 const ROLE_LABELS: Record<string, string> = {
   power: 'Power Admin',
   admin: 'Admin',
@@ -79,6 +81,7 @@ export default function UploadScreen() {
   const [selectedLevelLabel, setSelectedLevelLabel] = useState('');
   const [loadingDepartments, setLoadingDepartments] = useState(false);
   const [imageSize, setImageSize] = useState(0);
+  const [imageAttachmentMode, setImageAttachmentMode] = useState<ImageAttachmentMode>('full');
   const [showPreview, setShowPreview] = useState(false);
 
   const canCreate = !!user && ['power', 'admin', 'd-admin'].includes(user.role || '');
@@ -140,6 +143,7 @@ export default function UploadScreen() {
   const resetComposer = useCallback((options?: { keepPreview?: boolean }) => {
     setText('');
     setImage(undefined);
+    setImageAttachmentMode('full');
     setCategory('All');
     setSelectedDepartment('');
     setSelectedLevelId('');
@@ -277,9 +281,13 @@ export default function UploadScreen() {
   const removeImage = () => {
     setImage(undefined);
     setImageSize(0);
+    setImageAttachmentMode('full');
   };
 
-  const attachImage = async (source: 'gallery' | 'camera') => {
+  const attachImage = async (
+    source: 'gallery' | 'camera',
+    attachmentMode: ImageAttachmentMode = 'full'
+  ) => {
     const permission = source === 'gallery'
       ? await ImagePicker.requestMediaLibraryPermissionsAsync()
       : await ImagePicker.requestCameraPermissionsAsync();
@@ -297,26 +305,34 @@ export default function UploadScreen() {
       ? await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           base64: true,
-          quality: 0.7,
-          allowsEditing: true,
-          aspect: [16, 9],
+          quality: attachmentMode === 'crop' ? 0.78 : 0.85,
+          allowsEditing: attachmentMode === 'crop',
+          ...(attachmentMode === 'crop' ? { aspect: [16, 9] as [number, number] } : {}),
         })
       : await ImagePicker.launchCameraAsync({
           base64: true,
-          quality: 0.7,
-          allowsEditing: true,
-          aspect: [16, 9],
+          quality: attachmentMode === 'crop' ? 0.78 : 0.85,
+          allowsEditing: attachmentMode === 'crop',
+          ...(attachmentMode === 'crop' ? { aspect: [16, 9] as [number, number] } : {}),
         });
 
     if (result.canceled || !result.assets[0]?.base64) {
       return;
     }
 
-    const encodedImage = `data:image/jpeg;base64,${result.assets[0].base64}`;
+    const mimeType = result.assets[0].mimeType || 'image/jpeg';
+    const encodedImage = `data:${mimeType};base64,${result.assets[0].base64}`;
     setImage(encodedImage);
     setImageSize(Math.round(((encodedImage.length * 3) / 4) / 1024));
+    setImageAttachmentMode(attachmentMode);
     setShowPreview(true);
-    showToast.success(source === 'gallery' ? 'Image attached.' : 'Photo captured.');
+    showToast.success(
+      attachmentMode === 'crop'
+        ? 'Cropped image attached.'
+        : source === 'gallery'
+          ? 'Full image attached.'
+          : 'Photo captured.'
+    );
   };
 
   const confirmClear = () => {
@@ -607,9 +623,9 @@ export default function UploadScreen() {
           })}
         </View>
 
-        {image ? (
+          {image ? (
           <View style={[styles.mediaFrame, { borderColor: theme.border }]}>
-            <Image source={{ uri: image }} style={styles.mediaImage} />
+            <Image source={{ uri: image }} style={styles.mediaImage} resizeMode="contain" />
             <View style={styles.mediaControls}>
               <Pressable
                 onPress={removeImage}
@@ -618,15 +634,19 @@ export default function UploadScreen() {
                 <Ionicons name="trash-outline" size={16} color="#FFFFFF" />
               </Pressable>
               <Pressable
-                onPress={() => void attachImage('gallery')}
+                onPress={() => void attachImage('gallery', 'crop')}
                 style={[styles.mediaControl, { backgroundColor: 'rgba(6, 21, 35, 0.78)' }]}
               >
-                <Ionicons name="refresh-outline" size={16} color="#FFFFFF" />
+                <Ionicons name="crop-outline" size={16} color="#FFFFFF" />
               </Pressable>
             </View>
             <View style={[styles.imageBadge, { backgroundColor: theme.surfaceStrong, borderColor: theme.border }]}>
               <Text style={[styles.imageBadgeText, { color: theme.text }]}>
-                {imageSize > 0 ? `${imageSize} KB attached` : 'Image attached'}
+                {imageSize > 0
+                  ? `${imageSize} KB • ${imageAttachmentMode === 'crop' ? 'Cropped 16:9' : 'Full image'}`
+                  : imageAttachmentMode === 'crop'
+                    ? 'Cropped 16:9 image'
+                    : 'Full image attached'}
               </Text>
             </View>
           </View>
@@ -636,14 +656,20 @@ export default function UploadScreen() {
           <Text style={[styles.addPostTitle, { color: theme.text }]}>Add to your post</Text>
           <View style={styles.toolRow}>
             {renderComposerTool({
-              label: image ? 'Replace photo' : 'Photo',
+              label: image ? 'Replace photo' : 'Full photo',
               icon: 'image-outline',
-              onPress: () => void attachImage('gallery'),
+              onPress: () => void attachImage('gallery', 'full'),
+            })}
+            {renderComposerTool({
+              label: 'Crop 16:9',
+              icon: 'crop-outline',
+              onPress: () => void attachImage('gallery', 'crop'),
+              tone: 'warning',
             })}
             {renderComposerTool({
               label: 'Camera',
               icon: 'camera-outline',
-              onPress: () => void attachImage('camera'),
+              onPress: () => void attachImage('camera', 'full'),
             })}
             {renderComposerTool({
               label: showPreview ? 'Hide preview' : 'Preview',
@@ -773,10 +799,14 @@ export default function UploadScreen() {
             <Text style={[styles.previewBody, { color: theme.text }]}>{text.trim()}</Text>
           ) : null}
 
-          {image ? <Image source={{ uri: image }} style={styles.previewImage} /> : null}
+          {image ? <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" /> : null}
 
           <View style={[styles.previewDivider, { borderTopColor: theme.border, borderBottomColor: theme.border }]}>
-            <Text style={[styles.previewStats, { color: theme.textSoft }]}>Previewing how this post will appear in the feed</Text>
+            <Text style={[styles.previewStats, { color: theme.textSoft }]}>
+              {image && imageAttachmentMode === 'full'
+                ? 'Previewing the feed card. The full image stays available on the post details page.'
+                : 'Previewing how this post will appear in the feed'}
+            </Text>
           </View>
 
           <View style={styles.previewActions}>
@@ -951,6 +981,7 @@ const styles = StyleSheet.create({
   mediaImage: {
     width: '100%',
     height: 240,
+    backgroundColor: '#091521',
   },
   mediaControls: {
     position: 'absolute',

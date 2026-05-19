@@ -1,6 +1,6 @@
 import type { PostItem } from '@/services/postsApi';
 
-const trimTrailingZero = (value: string) => value.replace(/\.0$/, '');
+const toSingleDecimalFloor = (value: number) => (Math.floor(value * 10) / 10).toFixed(1);
 
 export const formatPostTimeAgo = (value?: string) => {
   if (!value) {
@@ -46,15 +46,17 @@ export const formatPostCount = (value: number) => {
     return '0';
   }
 
+  const safeValue = Math.trunc(value);
+
   if (value >= 1000000) {
-    return `${trimTrailingZero((value / 1000000).toFixed(value >= 10000000 ? 0 : 1))}M`;
+    return `${toSingleDecimalFloor(safeValue / 1000000)}M`;
   }
 
-  if (value >= 1000) {
-    return `${trimTrailingZero((value / 1000).toFixed(value >= 10000 ? 0 : 1))}K`;
+  if (safeValue >= 100) {
+    return `${toSingleDecimalFloor(safeValue / 1000)}k`;
   }
 
-  return String(value);
+  return String(safeValue);
 };
 
 export const buildAuthorHandle = (name: string, fallbackId = '') => {

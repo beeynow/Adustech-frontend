@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -27,6 +28,7 @@ import { showToast } from '../../utils/toast';
 import { useAppTheme } from '../../utils/theme';
 import { PostCard } from '../../components/posts/PostCard';
 import { PostCommentCard } from '../../components/posts/PostCommentCard';
+import { formatPostCount } from '../../components/posts/postUi';
 
 const CATEGORIES = ['All', 'Level', 'Department', 'Exam', 'Timetable'] as const;
 
@@ -483,109 +485,115 @@ export default function HomeScreen() {
         onRequestClose={() => setCommentsVisible(false)}
       >
         <View style={styles.sheetOverlay}>
-          <View
-            style={[
-              styles.sheetWrap,
-              {
-                backgroundColor: theme.surfaceStrong,
-                borderTopColor: theme.border,
-                shadowColor: theme.shadow,
-              },
-            ]}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+            style={styles.sheetKeyboard}
           >
-            <View style={[styles.sheetHandle, { backgroundColor: theme.borderStrong }]} />
+            <View
+              style={[
+                styles.sheetWrap,
+                {
+                  backgroundColor: theme.surfaceStrong,
+                  borderTopColor: theme.border,
+                  shadowColor: theme.shadow,
+                },
+              ]}
+            >
+              <View style={[styles.sheetHandle, { backgroundColor: theme.borderStrong }]} />
 
-            <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
-              <View style={styles.sheetHeaderText}>
-                <Text style={[styles.sheetTitle, { color: theme.text }]}>Comments</Text>
-                <Text style={[styles.sheetSubtitle, { color: theme.textSoft }]}>
-                  {activePost ? `${activePost.commentsCount} saved replies` : 'Join the conversation'}
-                </Text>
+              <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
+                <View style={styles.sheetHeaderText}>
+                  <Text style={[styles.sheetTitle, { color: theme.text }]}>Comments</Text>
+                  <Text style={[styles.sheetSubtitle, { color: theme.textSoft }]}>
+                    {activePost ? `${formatPostCount(activePost.commentsCount)} saved replies` : 'Join the conversation'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.sheetClose, { backgroundColor: theme.surfaceMuted }]}
+                  onPress={() => setCommentsVisible(false)}
+                >
+                  <Ionicons name="close" size={18} color={theme.textSoft} />
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={[styles.sheetClose, { backgroundColor: theme.surfaceMuted }]}
-                onPress={() => setCommentsVisible(false)}
-              >
-                <Ionicons name="close" size={18} color={theme.textSoft} />
-              </TouchableOpacity>
-            </View>
-
-            {loadingComments ? (
-              <View style={styles.sheetLoader}>
-                <ActivityIndicator size="small" color={theme.accent} />
-              </View>
-            ) : (
-              <FlatList
-                data={sheetComments}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={styles.sheetCommentWrap}>
-                    <PostCommentCard
-                      comment={item}
-                      onPressLike={() => {
-                        void toggleSheetCommentLike(item.id);
-                      }}
-                    />
-                  </View>
-                )}
-                contentContainerStyle={styles.sheetListContent}
-                keyboardShouldPersistTaps="handled"
-                ListEmptyComponent={(
-                  <View style={styles.sheetEmptyState}>
-                    <Text style={[styles.sheetEmptyTitle, { color: theme.text }]}>
-                      No comments yet
-                    </Text>
-                    <Text style={[styles.sheetEmptySubtitle, { color: theme.textSoft }]}>
-                      Start the thread and your reply will be saved to this post.
-                    </Text>
-                  </View>
-                )}
-              />
-            )}
-
-            <View style={[styles.sheetComposer, { borderTopColor: theme.border }]}>
-              <View
-                style={[
-                  styles.sheetInputWrap,
-                  {
-                    backgroundColor: theme.input,
-                    borderColor: theme.border,
-                  },
-                ]}
-              >
-                <TextInput
-                  value={sheetText}
-                  onChangeText={setSheetText}
-                  placeholder="Add a comment..."
-                  placeholderTextColor={theme.textSoft}
-                  style={[styles.sheetInput, { color: theme.text }]}
+              {loadingComments ? (
+                <View style={styles.sheetLoader}>
+                  <ActivityIndicator size="small" color={theme.accent} />
+                </View>
+              ) : (
+                <FlatList
+                  data={sheetComments}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <View style={styles.sheetCommentWrap}>
+                      <PostCommentCard
+                        comment={item}
+                        onPressLike={() => {
+                          void toggleSheetCommentLike(item.id);
+                        }}
+                      />
+                    </View>
+                  )}
+                  contentContainerStyle={styles.sheetListContent}
+                  keyboardShouldPersistTaps="handled"
+                  ListEmptyComponent={(
+                    <View style={styles.sheetEmptyState}>
+                      <Text style={[styles.sheetEmptyTitle, { color: theme.text }]}>
+                        No comments yet
+                      </Text>
+                      <Text style={[styles.sheetEmptySubtitle, { color: theme.textSoft }]}>
+                        Start the thread and your reply will be saved to this post.
+                      </Text>
+                    </View>
+                  )}
                 />
-              </View>
+              )}
 
-              <TouchableOpacity
-                onPress={addSheetComment}
-                disabled={submittingComment || !sheetText.trim()}
-                style={[
-                  styles.sheetSend,
-                  {
-                    backgroundColor: sheetText.trim() ? theme.accent : theme.surfaceMuted,
-                    opacity: submittingComment ? 0.75 : 1,
-                  },
-                ]}
-              >
-                {submittingComment ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Ionicons
-                    name="send-outline"
-                    size={18}
-                    color={sheetText.trim() ? '#FFFFFF' : theme.textSoft}
+              <View style={[styles.sheetComposer, { borderTopColor: theme.border }]}>
+                <View
+                  style={[
+                    styles.sheetInputWrap,
+                    {
+                      backgroundColor: theme.input,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    value={sheetText}
+                    onChangeText={setSheetText}
+                    placeholder="Add a comment..."
+                    placeholderTextColor={theme.textSoft}
+                    style={[styles.sheetInput, { color: theme.text }]}
                   />
-                )}
-              </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  onPress={addSheetComment}
+                  disabled={submittingComment || !sheetText.trim()}
+                  style={[
+                    styles.sheetSend,
+                    {
+                      backgroundColor: sheetText.trim() ? theme.accent : theme.surfaceMuted,
+                      opacity: submittingComment ? 0.75 : 1,
+                    },
+                  ]}
+                >
+                  {submittingComment ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons
+                      name="send-outline"
+                      size={18}
+                      color={sheetText.trim() ? '#FFFFFF' : theme.textSoft}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -746,6 +754,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
     backgroundColor: 'rgba(5, 15, 26, 0.18)',
+  },
+  sheetKeyboard: {
+    justifyContent: 'flex-end',
   },
   sheetWrap: {
     minHeight: '64%',

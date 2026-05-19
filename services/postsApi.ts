@@ -117,6 +117,7 @@ export interface LikeMutationResponse {
   success: boolean;
   liked: boolean;
   likesCount: number;
+  likesDelta?: number;
   message: string;
 }
 
@@ -377,10 +378,14 @@ export const postsAPI = {
   toggleLike: async (id: string): Promise<LikeMutationResponse> => {
     try {
       const response = await api.post(`/posts/${id}/like`);
+      const liked = normalizeBoolean(response.data?.liked ?? response.data?.isLiked);
       return {
         success: response.data?.success !== false,
-        liked: normalizeBoolean(response.data?.liked),
+        liked,
         likesCount: normalizeNumber(response.data?.likesCount ?? response.data?.totalLikes),
+        likesDelta: typeof response.data?.likesDelta === 'number'
+          ? response.data.likesDelta
+          : (liked ? 1 : -1),
         message: normalizeString(response.data?.message),
       };
     } catch (error) {
@@ -430,10 +435,14 @@ export const postsAPI = {
   toggleLikeComment: async (postId: string, commentId: string): Promise<LikeMutationResponse> => {
     try {
       const response = await api.post(`/posts/${postId}/comments/${commentId}/like`);
+      const liked = normalizeBoolean(response.data?.liked ?? response.data?.isLiked);
       return {
         success: response.data?.success !== false,
-        liked: normalizeBoolean(response.data?.liked),
+        liked,
         likesCount: normalizeNumber(response.data?.likesCount ?? response.data?.totalLikes),
+        likesDelta: typeof response.data?.likesDelta === 'number'
+          ? response.data.likesDelta
+          : (liked ? 1 : -1),
         message: normalizeString(response.data?.message),
       };
     } catch (error) {
